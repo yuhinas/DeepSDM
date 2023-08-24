@@ -1,0 +1,200 @@
+import torch
+import torch.nn.functional as F
+from torch.utils.data import Dataset
+import torchvision.transforms as transforms
+import numpy as np
+
+class TaxaDataset(Dataset):
+    def __init__(self, env_stack, embedding, label_stack, k2_stack, trainorval, conf, cuda_id=0):
+
+        self.cuda_id = cuda_id
+        
+        self.species_date_list = label_stack['species_date']
+        self.species_list = label_stack['species']
+        self.date_list = label_stack['date']
+        self.embedding = embedding
+        self.split = torch.tensor(np.loadtxt(('./workspace/partition.txt'), delimiter = ',')).to(torch.int)
+        self.conf = conf
+
+        if trainorval == 'train':
+            self.trainorval = 1
+        else:
+            self.trainorval = 0
+        
+        self.height_original = label_stack['tensor'].shape[1]
+        self.width_original = label_stack['tensor'].shape[2]
+        self.height_new = self.height_original + (self.split.shape[0] - self.height_original % self.split.shape[0])
+        self.width_new = self.width_original + (self.split.shape[1] - self.width_original % self.split.shape[1])
+        
+        
+        # train, val 根據split切分後的大小
+        self.split_height = self.height_new // self.split.shape[0]
+        self.split_width = self.width_new // self.split.shape[1]
+
+#         torch.cuda.synchronize()
+#         starttime = time.time()
+#         print('########## STACKS ##########')
+        
+        # 根據split切分後的小部分的長寬位置
+        split_tif = torch.zeros(self.height_new, self.width_new)
+        split_element = []
+        h_, w_ = torch.where(self.split == self.trainorval)
+        for i in range(sum(self.split.view(-1) == self.trainorval)):
+            height_start = h_[i] * self.split_height
+            height_end = (h_[i] + 1) * self.split_height
+            width_start = w_[i] * self.split_width
+            width_end = (w_[i] + 1) * self.split_width
+            split_tif[height_start : height_end, width_start : width_end] = 1
+            split_element.append([height_start, height_end, width_start, width_end])
+        self.split_tif = split_tif
+        self.split_element = split_element
+        
+        # 調整env_stack, label_stack, k
+        # env_stack
+        env_stack_new = []
+        for i in range(env_stack['tensor'].shape[0]):
+            tensor = []
+            for j in range(env_stack['tensor'].shape[1]):
+                tensor_select = env_stack['tensor'][i, j, :, :] #.detach()
+                # WHY PAD (0, W, 0, H) instead of (W/2, W/2, H/2, H/2) ??????
+                tensor.append(tensor_select[None, ])
+#                 tensor.append(F.pad(tensor_select[None, ], 
+#                                     (0, (self.width_new - self.width_original), 0, (self.height_new - self.height_original)), 
+#                                     mode = 'replicate'))
+            env_stack_new.append(torch.cat(tensor).to(f'cuda:{self.cuda_id}'))
+        torch.cuda.synchronize()
+        self.env_stack = F.pad(torch.stack(env_stack_new),
+                               (0, (self.width_new - self.width_original), 0, (self.height_new - self.height_original)),
+                               mode = 'replicate')
+        env_stack_new.clear()
+        self.env_stack = self.env_stack.cpu()
+        torch.cuda.empty_cache()
+        
+#         print(self.env_stack.shape)
+        #label_stack
+        label_stack_new = []
+        for i in range(label_stack['tensor'].shape[0]):
+            label_stack_new.append(label_stack['tensor'][i:(i+1), :, :].cuda(self.cuda_id))
+#             label_stack_new.append(F.pad(label_stack['tensor'][i:(i+1), :, :], 
+#                                          (0, (self.width_new - self.width_original), 0, (self.height_new - self.height_original)), 
+#                                          mode = 'constant', 
+#                                          value = 0))
+        self.label_stack = F.pad(torch.cat(label_stack_new),
+                                 (0, (self.width_new - self.width_original), 0, (self.height_new - self.height_original)), 
+                                 mode = 'constant', 
+                                 value = 0)
+        label_stack_new.clear()
+        self.label_stack = self.label_stack.cpu()
+        torch.cuda.empty_cache()
+        
+
+        #k2
+        k2_stack_new = []
+        for i in range(k2_stack['tensor'].shape[0]):
+            k2_stack_new.append(k2_stack['tensor'][i:(i+1), :, :].cuda(self.cuda_id))
+#             k2_stack_new.append(F.pad(k2_stack['tensor'][i:(i+1), :, :], 
+#                                (0, (self.width_new - self.width_original), 0, (self.height_new - self.height_original)), 
+#                                mode = 'constant', 
+#                                value = 999))
+        self.k2_stack = F.pad(torch.cat(k2_stack_new),
+                              (0, (self.width_new - self.width_original), 0, (self.height_new - self.height_original)), 
+                              mode = 'constant',
+                              value = 999)
+        k2_stack_new.clear()
+        self.k2_stack = self.k2_stack.cpu()
+        torch.cuda.empty_cache()
+
+        self.k2_stack_date = k2_stack['date_list']
+        
+#         torch.cuda.synchronize()
+#         print(time.time() - starttime)
+#         print('########## STACKS ##########')
+
+        self.random_transform = transforms.Compose([
+            transforms.RandomHorizontalFlip(),
+            transforms.RandomVerticalFlip(),
+            transforms.RandomApply(
+                torch.nn.ModuleList([
+                    transforms.RandomRotation((90, 90)),
+                ]),
+                p=0.5
+            )
+        ])
+
+        
+    def __getitem__(self, index):
+        
+        idx_species_date, idx_split = self._getidx(index)
+        height_start, height_end, width_start, width_end = self._getextent(idx_split)
+        
+        # embeddings
+        species = self.species_list[idx_species_date]
+        date = self.date_list[idx_species_date]
+        embeddings = torch.tensor(self.embedding[species]).reshape(-1, 1, 1)
+        
+        # k
+        idx_date = self.k2_stack_date.index(date)
+        k2 = self.k2_stack[idx_date:(idx_date+1), height_start:height_end, width_start:width_end]#.cuda(self.cuda_id)
+        
+        # inputs
+        inputs = self.env_stack[idx_date, :, height_start : height_end, width_start : width_end]#.cuda(self.cuda_id)
+        
+        # labels
+        labels = self.label_stack[idx_species_date:(idx_species_date+1), height_start:height_end, width_start:width_end]#.cuda(self.cuda_id)
+
+        if self.trainorval == 1:
+            random_stack_num = self.conf.num_train_subsample_stacks
+        else:
+            random_stack_num = self.conf.num_val_subsample_stacks
+            
+        embeddings = torch.unsqueeze(embeddings, axis=0)
+        k2 = torch.unsqueeze(k2, axis=0)
+        inputs = torch.unsqueeze(inputs, axis=0)
+        labels = torch.unsqueeze(labels, axis=0)
+
+        stacked_all = torch.cat([inputs, labels, k2], axis = 1)
+        stacked_all = self.random_transform(stacked_all)
+        labels = stacked_all[:, inputs.shape[1]:(inputs.shape[1] + labels.shape[1])]
+        k2 = stacked_all[:, (inputs.shape[1] + labels.shape[1]):(inputs.shape[1] + labels.shape[1] + k2.shape[1])]
+
+        #每個training set隨機選config.num_train_subsample_stacks個小subsample出來訓練
+        rand_height = torch.randint(0, (self.split_height - self.conf.subsample_height + 1), (random_stack_num, ))
+        rand_width = torch.randint(0, (self.split_width - self.conf.subsample_width + 1), (random_stack_num, ))
+
+        inputs_random_stack = []
+        labels_random_stack = []
+        k2_random_stack = []
+        embeddings_random_stack = []
+
+        for i_stack in range(random_stack_num):
+            height_start, height_end = rand_height[i_stack], rand_height[i_stack] + self.conf.subsample_height
+            width_start, width_end = rand_width[i_stack], rand_width[i_stack] + self.conf.subsample_width
+
+            inputs_random_stack.append(inputs[:, :, height_start:height_end, width_start:width_end])
+            labels_random_stack.append(labels[:, :, height_start:height_end, width_start:width_end])
+            embeddings_random_stack.append(embeddings)
+            k2_random_stack.append(k2[:, :, height_start:height_end, width_start:width_end])
+
+        inputs_model = torch.cat(inputs_random_stack)
+        labels_model = torch.cat(labels_random_stack)
+        k2_model = torch.cat(k2_random_stack)
+        embeddings_model = torch.cat(embeddings_random_stack)
+#         print(inputs_model.shape, embeddings_model.shape, labels_model.shape, k2_model.shape, species, date)
+        return [inputs_model, embeddings_model], labels_model, k2_model, species, date
+
+    def __len__(self):
+        return len(self.species_date_list) * sum(self.split.view(-1) == self.trainorval)
+    
+    
+    def _getidx(self, index):
+        idx_species_date = index % len(self.species_date_list)
+        idx_split = index // len(self.species_date_list)
+
+        return idx_species_date, idx_split
+    
+    def _getextent(self, idx_split):
+        height_start = self.split_element[idx_split][0]
+        height_end = self.split_element[idx_split][1]
+        width_start = self.split_element[idx_split][2]
+        width_end = self.split_element[idx_split][3]
+        return height_start, height_end, width_start, width_end
