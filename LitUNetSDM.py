@@ -465,7 +465,7 @@ class LitUNetSDM(pl.LightningModule):
             ax.plot(np.where((label.cpu().numpy() == 1) & (partition.cpu().numpy() == 0))[1], np.where((label.cpu().numpy() == 1) & (partition.cpu().numpy() == 0))[0], '.', color = 'green')
 
             #title_ = f'{species_date[0]}_ep{self.current_epoch:04d}'
-            date_ = '-'.join(species_date[0].split('_')[-3:])
+            date_ = species_date[0].split('_')[-1]
             ax.set_title(date_)
 #             plt.axis('off')        
 #             wandb.log({f"{species_time[0]}": [wandb.Image(plt, mode = 'L')]}, 
@@ -474,7 +474,7 @@ class LitUNetSDM(pl.LightningModule):
 #             taiwan_map = result_img
 
             if dataloader_idx % ncols == ncols - 1:
-                sp_ = '_'.join(species_date[0].split('_')[:-3])
+                sp_ = '_'.join(species_date[0].split('_')[:-1])
                 fig.suptitle(f'{self.trainer.state.stage}: {sp_}_ep{self.current_epoch:04d}_smoothviz')
                 plt.tight_layout()
 #                 plt.savefig(f'tmp/{sp_}_ep{self.current_epoch:04d}_smoothviz.png')

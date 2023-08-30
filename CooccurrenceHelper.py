@@ -4,7 +4,8 @@ from datetime import datetime
 import pickle as pkl
 import numpy as np
 import torch
-
+import time
+from sklearn.metrics import pairwise_distances
 class CooccurrenceHelper():
     def __init__ (self,
                   spatial_conf,
@@ -91,6 +92,7 @@ class CooccurrenceHelper():
         # filter records by date
         species_filter = species_filter[(species_filter['daysincebegin'].values >= self.day_first) & (species_filter['daysincebegin'].values <= self.day_last)].reset_index(drop = True)
         
+        species_filter = species_filter.query('(decimalLatitude >= @self.y_start) & (decimalLatitude < @self.y_end) & (decimalLongitude >= @self.x_start) & (decimalLongitude < @self.x_end)').reset_index(drop=True)
         
         # save filtered csv
         species_filter.to_csv(os.path.join(self.occurrence_dir, 'species_occurrence_filter.csv'), index = None)
@@ -99,16 +101,19 @@ class CooccurrenceHelper():
         self.species_filter = species_filter
 
 
-    def aggregate_cooccurrence_units(self):
-
+    def aggregate_cooccurrence_units(self, sp_filter_from=None):
+        start_time = time.time()
         def res_divider(a, b):
             digit_parts = str(b).split('.')
             assert(len(digit_parts) == 2)
             num_digits_after_decimal = min(len(digit_parts[1]), 6)
             return round(a / b, num_digits_after_decimal)
 
-        
-        sp_filter = self.species_filter.copy()
+        if sp_filter_from is None:
+            sp_filter = self.species_filter.copy()
+        else:
+            sp_filter = pd.read_csv(sp_filter_from)
+            
         self.data_unit = dict()
         
         sp_filter['daysincebeginUnit'] = ((sp_filter.daysincebegin - sp_filter.daysincebegin.min()) // self.cooccurrence_day_limit).astype(int)        
@@ -122,10 +127,89 @@ class CooccurrenceHelper():
             if round(x, 2) not in data_unit[t]:
                 data_unit[t][x] = dict()
             self.data_unit[t][x][y] = df
+#             print("Aggregating...", t,x,y, end='\r')
 
         # order: t, x, y
         sp_filter.groupby(['daysincebeginUnit', 'decimalLongitudeUnit', 'decimalLatitudeUnit']).apply(coocurr_agg, self.data_unit)
+        print(f'Aggregating data costs {time.time() - start_time} seconds.')
+        
+    def count_cooccurrence_mod(self, cooccurrence_counts_file='cooccurrence.csv'):
+        start_time = time.time()
+        data_unit = self.data_unit
+        primary_indices = {}
+        cooccur_counts_df = None
+        for t in data_unit:
+            len_t = max(data_unit)
+            for x in data_unit[t]:
+                len_x = max(data_unit[t])
+                for y in data_unit[t][x]:
+                    len_y = max(data_unit[t][x])
+                    print(f'Counting... {t}/{len_t}, {x}/{len_x}, {y}/{len_y}', end='\r')
 
+                    obsrvs1 = data_unit[t][x][y]            
+
+                    neighbor_units = np.array(np.meshgrid([0, 1], [0, 1], [0, 1]), dtype=int).T.reshape(-1, 3)
+
+                    for dt, dx, dy in neighbor_units:
+                        neighbor_t = t + dt
+                        if neighbor_t not in data_unit:
+                            continue
+
+                        neighbor_x = x + dx
+                        if neighbor_x not in data_unit[neighbor_t]:
+                            continue
+
+                        neighbor_y = y + dy
+                        if neighbor_y not in data_unit[neighbor_t][neighbor_x]:
+                            continue
+
+                        obsrvs2 = data_unit[neighbor_t][neighbor_x][neighbor_y]
+
+                        day_unit_str = f'd{t}-{neighbor_t}'
+                        spatial_unit_x = f'x{x}-{neighbor_x}' #str(cooccur_satisfied_vals[i][4]*1000 + cooccur_satisfied_vals[i][5])
+                        spatial_unit_y = f'y{y}-{neighbor_y}' #str(cooccur_satisfied_vals[i][1]*1000 + cooccur_satisfied_vals[i][2])
+                        data_unit_str = f'{day_unit_str}_{spatial_unit_x}_{spatial_unit_y}'
+
+                        if data_unit_str in primary_indices:
+                            continue
+
+                        primary_indices[data_unit_str] = True
+
+                        pwd_spatial_satisfied = pairwise_distances(obsrvs1[['decimalLatitude', 'decimalLongitude']], obsrvs2[['decimalLatitude', 'decimalLongitude']]) < self.cooccurrence_xy_limit
+                        pwd_temporal_satisfied = pairwise_distances(obsrvs1[['day']], obsrvs2[['day']]) < self.cooccurrence_day_limit
+                        pwd_satisfied = pwd_spatial_satisfied & pwd_temporal_satisfied
+                        satisfied_idx = np.where(pwd_satisfied)
+                        cooccur_satisfied_vals = np.stack([
+                            obsrvs1.iloc[satisfied_idx[0]].species.values, 
+                            obsrvs2.iloc[satisfied_idx[1]].species.values
+                        ], axis=1)
+                        cooccur_satisfied_vals = cooccur_satisfied_vals[cooccur_satisfied_vals[:, 0]!=cooccur_satisfied_vals[:, 1]]
+                        if cooccur_satisfied_vals.shape[0] > 0:
+                            cooccur_satisfied_vals.sort(axis=1)
+                            cooccur_local_unique = pd.DataFrame(cooccur_satisfied_vals, columns=['sp1', 'sp2'])
+                            cooccur_local_unique_counts = cooccur_local_unique.groupby(['sp1', 'sp2']).size().to_frame('counts').reset_index()
+                            if cooccur_counts_df is None:
+                                cooccur_counts_df = cooccur_local_unique_counts
+                            else:
+                                cooccur_counts_df = pd.concat([cooccur_counts_df, cooccur_local_unique_counts])
+
+            cooccur_counts_df = cooccur_counts_df.groupby(['sp1', 'sp2']).sum().reset_index()                    
+        # save the cooccurrence csv
+        cooccur_counts_df.to_csv(os.path.join(self.cooccurrence_dir, cooccurrence_counts_file), sep='\t', index=False)
+        print(f'File: {os.path.join(self.cooccurrence_dir, cooccurrence_counts_file)} saved.')
+        print(f'Counting cooccurrence costs {time.time() - start_time} seconds.')
+#         with open(os.path.join(self.cooccurrence_dir, cooccurrence_counts_file), 'w', encoding='utf-8') as out_file:
+#             out_file.write(f"sp1\tsp2\tcounts\n")
+#             for key in cooccurrence:
+#                 try:
+#                     out_file.write(f"{key[0]}\t{key[1]}\t{cooccurrence[key]}\n")
+#                 except:
+#                     # WHAT is `mat` ???
+#                     print(key, mat[key])
+
+                    
+                    
+                    
     def count_cooccurrence(self, cooccurrence_counts_file='cooccurrence.csv'):
         
         data_unit = self.data_unit

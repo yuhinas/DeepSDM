@@ -8,7 +8,7 @@ from LitDeepSDMData import LitDeepSDMData
 from LitUNetSDM import LitUNetSDM
 
 # List those environment rasters for training, must be equal to or be a subset of env_list in step 01_prepare_data.
-env_list = ['tmax', 'tmin', 'prec', 'elev']
+env_list = ['tmax', 'tmin', 'prec', 'elev', 'evi']
 # Those environment rasters that don't need normalization or are already normalized, e.g. PCA results.
 non_normalize_env_list = []
 
@@ -20,13 +20,13 @@ date_list = []
 # We keep data of 2020 for validation/prediction
 for y_ in range(2016, 2020):
     for m_ in range(1, 13):
-        date_list.append(f'{y_:04d}_{m_:02d}_01')
+        date_list.append(f'{y_:04d}-{m_:02d}-01')
 
 # list of species that selected for training
 species_list = ['Psilopogon_nuchalis', 'Yuhina_brunneiceps', 'Corvus_macrorhynchos', 'Zosterops_simplex', 'Passer_montanus', 'Spilopelia_chinensis', 'Acridotheres_javanicus']
 
 # lists of species and dates for smooth visualization preview
-date_list_smoothviz = ['2020_01_01', '2020_04_01', '2020_07_01', '2020_10_01']
+date_list_smoothviz = ['2020-01-01', '2020-04-01', '2020-07-01', '2020-10-01']
 species_list_smoothviz = ['Psilopogon_nuchalis', 'Yuhina_brunneiceps', 'Corvus_macrorhynchos']
 
 # packed the species lists and date lists for training

@@ -9,6 +9,7 @@ from osgeo import gdal
 from osgeo import gdalconst
 import cv2
 from matplotlib import pyplot as plt
+import re
 
 class RasterHelper:
     def __init__(self):
@@ -47,9 +48,6 @@ class RasterHelper:
         self.day_first = 0
         self.day_last = (self.date_end - self.date_start).days
 
-    def set_env_conf(self, env_conf):
-        self.env_conf = env_conf
-        
     def create_extent_binary_from_env_layer(self, input_env, spatial_conf):
         
         self.spatial_conf = spatial_conf
@@ -126,6 +124,233 @@ class RasterHelper:
         
         return self.spatial_conf
 
+    def raw_to_medium_(self, raw_env_tif, medium_env_tif):
+        destination = gdal.Open('./workspace/extent_binary.tif')
+        dst_transform = destination.GetGeoTransform()
+        dst_projection = destination.GetProjection()
+
+        src_tif  = gdal.Open(raw_env_tif, gdalconst.GA_ReadOnly)
+        src_trans = src_tif.GetGeoTransform()
+        src_proj = src_tif.GetProjection()
+
+        dst_driver= gdal.GetDriverByName('GTiff')
+        dst_tif = dst_driver.Create(medium_env_tif, 
+                               destination.RasterXSize, 
+                               destination.RasterYSize, 
+                               1, 
+                               gdalconst.GDT_Float32)
+
+        # 设置输出文件地理仿射变换参数与投影
+        dst_tif.SetGeoTransform(dst_transform)
+        dst_tif.SetProjection(dst_projection)
+
+        # 重投影，插值方法为双线性内插法
+        gdal.ReprojectImage(src_tif, dst_tif, src_proj, dst_projection, gdalconst.GRA_Bilinear)
+
+        destination = None
+        src_tif = None
+        dst_driver  = None
+        dst_tif = None
+
+        
+    def raw_to_medium_agg_(self, doy_to_month_tifs):
+        
+        raw_env_tifs = []
+        medium_env_tifs = []
+        
+        for doy_to_month_tif in doy_to_month_tifs:
+            raw_env_tifs.append(doy_to_month_tif['raw'])
+            medium_env_tifs.append(doy_to_month_tif['medium'])
+        
+        assert(len(np.unique(medium_env_tifs))==1)
+        
+        destination = gdal.Open('./workspace/extent_binary.tif')
+        dst_transform = destination.GetGeoTransform()
+        dst_projection = destination.GetProjection()
+
+        mem_raster_arrs = []
+        for raw_env_tif in raw_env_tifs:
+            src_tif  = gdal.Open(raw_env_tif, gdalconst.GA_ReadOnly)
+            src_trans = src_tif.GetGeoTransform()
+            src_proj = src_tif.GetProjection()
+            
+            mem_driver= gdal.GetDriverByName('MEM')
+            mem_tif = mem_driver.Create("", 
+                                   destination.RasterXSize, 
+                                   destination.RasterYSize, 
+                                   1, 
+                                   gdalconst.GDT_Float32)
+        
+            # 设置输出文件地理仿射变换参数与投影
+            mem_tif.SetGeoTransform(dst_transform)
+            mem_tif.SetProjection(dst_projection)
+
+            # 重投影，插值方法为双线性内插法
+            gdal.ReprojectImage(src_tif, mem_tif, src_proj, dst_projection, gdalconst.GRA_Bilinear)
+            
+            mem_raster_arrs.append(mem_tif.GetRasterBand(1).ReadAsArray())
+        
+        mem_raster_arr_avg = np.stack(mem_raster_arrs).mean(axis=0)
+            
+        dst_driver = gdal.GetDriverByName('GTiff')
+        dst_tif = dst_driver.CreateCopy(medium_env_tifs[0], mem_tif)
+        
+        dst_tif.GetRasterBand(1).WriteArray(mem_raster_arr_avg)
+            
+        destination = None
+        src_tif = None
+        dst_driver  = None
+        dst_tif = None
+        
+        
+    def build_env_(self, env, conf):
+        pattern = conf['filename_template'].replace('[YEAR]', r'(?P<year>\d{4})').replace('[MONTH]', r'(?P<month>\d{1,2})').replace('[DOY]', r'(?P<doy>\d{3})') + '$'
+        # Convert template to regex pattern
+        regex = re.compile(pattern)
+        every_year = False
+        every_month = False
+        with_doy = False
+        medium_env_dir = 'medium'
+
+        if env not in self.env_medium_list:
+            self.env_medium_list[env] = {}
+
+        try:
+            assert(len(conf['year_coverages']) == 2)
+            year_coverages_start, year_coverages_end = conf['year_coverages']
+            if year_coverages_start is None:
+                year_coverages_start = self.date_start.year
+            if year_coverages_end is None:
+                year_coverages_end = self.date_end.year
+        except:
+            year_coverages_start = self.date_start.year
+            year_coverages_end = self.date_end.year
+
+        self.doy_to_month_tifs = None
+            
+        for fname in os.listdir(conf['raw_env_dir']):
+
+            year = None
+            month = None
+            doy = None
+
+            # Filter files based on the regex pattern
+            matched = regex.search(fname)
+            if matched:
+                try:
+                    year = matched.group('year')
+                    every_year = True
+                except:
+                    pass
+
+                try:
+                    month = matched.group('month')
+                    every_month = True
+                except:
+                    pass
+
+                try:
+                    doy = matched.group('doy')
+                    with_doy = True
+                except:
+                    pass
+                
+                # You can either set month or day of year, but not both
+                assert(not(every_month and with_doy))
+                
+                if every_year and every_month:
+                    # this part has not been tested yet
+                    y = int(year)
+                    m = int(month)
+                    env_out = conf['env_out_template'].replace('[YEAR]', f'{y:04d}')
+                    env_out = conf['env_out_template'].replace('[MONTH]', f'{m:02d}')
+                    full_out_path = os.path.join(medium_env_dir, env)
+                    if not os.path.isdir(full_out_path):
+                        os.makedirs(full_out_path)
+                    self.raw_to_medium_(f'{conf["raw_env_dir"]}/{fname}', f'{full_out_path}/{env_out}')
+                    # fill no shit, missing data means missing data
+                    self.env_medium_list[env][f'{y:04d}-{m:02d}'] = f'{full_out_path}/{env_out}'
+                    print(env_out)
+
+                elif every_month:
+                    m = int(month)
+                    env_out = conf['env_out_template'].replace('[MONTH]', f'{m:02d}')
+                    full_out_path = os.path.join(medium_env_dir, env)
+                    if not os.path.isdir(full_out_path):
+                        os.makedirs(full_out_path)
+                    self.raw_to_medium_(f'{conf["raw_env_dir"]}/{fname}', f'{full_out_path}/{env_out}')
+                    # fill year
+                    for y in range(year_coverages_start, year_coverages_end + 1):
+                        self.env_medium_list[env][f'{y:04d}-{m:02d}'] = f'{full_out_path}/{env_out}'
+
+                elif every_year and not with_doy:
+                    y = int(year)
+                    env_out = conf['env_out_template'].replace('[YEAR]', f'{y:04d}')
+                    full_out_path = os.path.join(medium_env_dir, env)
+                    if not os.path.isdir(full_out_path):
+                        os.makedirs(full_out_path)
+                    self.raw_to_medium_(f'{conf["raw_env_dir"]}/{fname}', f'{full_out_path}/{env_out}')
+                    # fill month
+                    for m in range(1, 13):
+                        self.env_medium_list[env][f'{y:04d}-{m:02d}'] = f'{full_out_path}/{env_out}'
+
+                elif every_year and with_doy:
+                    # this part has not been tested yet
+                    # need aggregation
+                    y = int(year)
+                    doy = int(doy)
+                    date_ = datetime.strptime(f'{y} {doy}', '%Y %j')
+                    m = date_.month
+                    
+                    if self.doy_to_month_tifs is None:
+                        self.doy_to_month_tifs = dict()
+                    
+                    y_m = f'{y:04d}-{m:02d}'
+                    if y_m not in self.doy_to_month_tifs:
+                        self.doy_to_month_tifs[y_m] = []
+                        
+                    env_out = conf['env_out_template'].replace('[YEAR]', f'{y:04d}').replace('[MONTH]', f'{m:02d}')
+                    full_out_path = os.path.join(medium_env_dir, env)
+                    if not os.path.isdir(full_out_path):
+                        os.makedirs(full_out_path)
+
+                    self.doy_to_month_tifs[y_m].append(dict(
+                        raw = f'{conf["raw_env_dir"]}/{fname}',
+                        medium = f'{full_out_path}/{env_out}'
+                    ))
+                    # self.raw_to_medium_(f'{conf["raw_env_dir"]}/{fname}', f'{full_out_path}/{env_out}')
+                    # # fill month
+                    # for m in range(1, 13):
+                    #     self.env_medium_list[env][f'{y:04d}-{m:02d}'] = f'{full_out_path}/{env_out}'
+                    # print(env_out)
+
+                else:
+                    env_out = conf['env_out_template']
+                    full_out_path = os.path.join(medium_env_dir, env)
+                    if not os.path.isdir(full_out_path):
+                        os.makedirs(full_out_path)
+                    self.raw_to_medium_(f'{conf["raw_env_dir"]}/{fname}', f'{full_out_path}/{env_out}')
+                    # fill both year and month
+                    for y in range(year_coverages_start, year_coverages_end + 1):
+                        for m in range(1, 13):
+                            self.env_medium_list[env][f'{y:04d}-{m:02d}'] = f'{full_out_path}/{env_out}'
+    #                 print(env_out)
+        if self.doy_to_month_tifs is not None:
+            self.doy_to_month_tifs = dict(sorted(self.doy_to_month_tifs.items()))
+            for y_m in self.doy_to_month_tifs:
+                self.raw_to_medium_agg_(self.doy_to_month_tifs[y_m])
+                self.env_medium_list[env][y_m] = self.doy_to_month_tifs[y_m][0]['medium'] #f'{full_out_path}/{env_out}'
+
+        self.env_medium_list[env] = dict(sorted(self.env_medium_list[env].items()))
+
+    def raw_to_medium(self, env_raw_conf):
+        self.env_medium_list = {}
+        for env in env_raw_conf:
+            for conf in env_raw_conf[env]:
+                print(conf)
+                self.build_env_(env, conf)        
+        
+        
     def random_split_train_val(self, train_ratio=0.7):
         spatial_conf = self.spatial_conf
         total_grids = spatial_conf.num_of_grid_y * spatial_conf.num_of_grid_x
@@ -149,7 +374,186 @@ class RasterHelper:
         plt.imshow(ext_bin_array * (train_val_mask.astype(float) + .5) / 2)
         plt.show()
 
+
+    def avg_and_mask_env_timespan(self):
+        env_info = dict(
+            info = dict(),
+            dir_base = './'
+        )
+        y_m_combs = np.array(np.meshgrid(np.arange(self.date_start.year, self.date_end.year + 1, dtype=int), np.arange(1, 13, dtype=int))).T.reshape(-1, 2)
+
+        with rasterio.open('./workspace/extent_binary.tif') as extent_binary_raster:
+            mask = extent_binary_raster.read(1)
+
+        for env in self.env_medium_list:
+            print(env)
+            if env not in env_info['info']:
+                env_info['info'][env] = dict()
+
+            env_out_path = f'workspace/raster_data/env_aligned_timespan_avg/{env}'
+            if not os.path.isdir(env_out_path):
+                os.makedirs(env_out_path)
+
+            # get env files inventory
+            env_srcs = []
+            for i in range(y_m_combs.shape[0]):
+                y0, m0 = y_m_combs[i]
+                y0_m0 = f'{y0:04d}-{m0:02d}'
+                try:
+                    env_srcs.append(self.env_medium_list[env][y0_m0])
+                except:
+                    print(f"******* Warning. Missing data of env:{env} on {y0_m0}.")
+                    self.env_medium_list[env][y0_m0] = 'Not Available'
+                    env_srcs.append(self.env_medium_list[env][y0_m0])
+                    
+            env_unique_srcs = np.unique(env_srcs)
+
+            env_span_avgs = np.empty(0)
+            for i in range(y_m_combs.shape[0]):
+                y0, m0 = y_m_combs[i]
+                y0_m0 = f'{y0:04d}-{m0:02d}'
+                env_arrs = []
+                env_local_srcs = []
+                env_local_src_ids = []
+                y_m_list = []
+                for y, m in y_m_combs[i:(i+3)]:
+                    y_m = f'{y:04d}-{m:02d}'
+                    y_m_list.append(y_m)
+                    if self.env_medium_list[env][y_m] != 'Not Available':
+                        with rasterio.open(self.env_medium_list[env][y_m]) as env_raster:
+                            env_local_srcs.append(self.env_medium_list[env][y_m])
+                            env_local_src_ids.append(np.where(env_unique_srcs==self.env_medium_list[env][y_m])[0][0])
+                            env_arrs.append(env_raster.read(1))
+                            env_crs = env_raster.crs
+                            env_transform = env_raster.transform
+                    else:
+                        print(f"******* Warning. Data of env: {env} on {y_m} is not available.")
+
+                if len(env_arrs) == 0:
+                    print(f"******* Error. Data missing on full span. ({'.'.join(y_m_list)})")
+                    assert(len(env_arrs)>0)
+                    assert(len(env_arrs) == len(env_local_srcs))
+                    assert(len(env_local_src_ids) == len(env_local_srcs))
+
+                fname_base = '.'.join(os.path.basename(self.env_medium_list[env][y0_m0]).split('.')[:-1])
+
+                srcs_, cnts_ = np.unique(env_local_src_ids, return_counts = True)
+                postfixs = []
+
+                if len(srcs_) > 1:
+                    for src_i in range(len(srcs_)):
+                        postfixs.append(f'{srcs_[src_i]}.{cnts_[src_i]}')
+                    fname = f'{fname_base}_srcs{"and".join(postfixs)}_timespan_avg.tif'
+                else:
+                    fname = f'{fname_base}.tif'
+
+                path_name = f'{env_out_path}/{fname}'
+
+                if y0_m0 not in env_info['info'][env]:
+                    env_info['info'][env][y0_m0] = dict()
+
+                env_info['info'][env][y0_m0]['tif_span_avg'] = path_name
+                env_info['info'][env][y0_m0]['tif_sources'] = list(env_unique_srcs[srcs_])
+                env_arr_span_avg = np.stack(env_arrs).mean(axis=0)
+
+                with rasterio.open(
+                    os.path.join(path_name), 
+                    'w',
+                    height = env_arr_span_avg.shape[0],
+                    width = env_arr_span_avg.shape[1], 
+                    count = 1, 
+                    nodata = -9, 
+                    crs = env_crs, 
+                    dtype = rasterio.float32,
+                    transform = env_transform
+                ) as tif_out:
+                    tif_out.write(env_arr_span_avg * mask, 1)
+
+                env_span_avgs = np.concatenate((env_span_avgs, env_arr_span_avg[mask == 1]))
+
+            env_info['info'][env]['mean'] = np.mean(env_span_avgs)
+            env_info['info'][env]['sd'] = np.std(env_span_avgs)
+
+        with open('./workspace/env_information.json', 'w') as f:
+            json.dump(env_info, f)        
+
+#         return env_info
         
+    
+    #########################################
+        
+    def create_k_info(self):
+
+        self.k_out = './workspace/raster_data/k'
+        if not os.path.exists(self.k_out):
+            os.makedirs(self.k_out)
+        
+        k_info = dict()
+        k_info['dir_base'] = self.k_out
+        k_info['file_name'] = dict()
+
+        with rasterio.open('./workspace/extent_binary.tif') as raster_:
+            extent_transform = raster_.transform
+            extent_binary = raster_.read(1)
+            extent_crs = raster_.crs
+
+        xres = abs(extent_transform[0])
+        yres = abs(extent_transform[4])
+
+        if self.species_filter is None:
+            self.species_filter = pd.read_csv('./workspace/species_data/occurrence_data/species_occurrence_filter.csv')
+            self.species_list = np.unique(self.species_filter.species)
+
+        species_filter = self.species_filter.copy()
+        species_filter['week'] = species_filter.daysincebegin // 7
+
+        date_target_start = self.date_start
+        date_target_end = self.time_span(date_target_start)
+        day_target_start = (date_target_start - self.date_start).days
+        day_target_end = (date_target_end - self.date_start).days
+
+
+        while date_target_start <= self.date_end:
+            species_filter_day = species_filter[(species_filter.daysincebegin < day_target_end) & (species_filter.daysincebegin >= day_target_start)]
+            week_list = list(set(species_filter_day.week))
+
+            rst_time_span = np.zeros([extent_binary.shape[0], extent_binary.shape[1]])
+            
+            for week in week_list:
+                rst_week = np.zeros([extent_binary.shape[0], extent_binary.shape[1]])
+                species_filter_week = species_filter_day[species_filter_day.week == week]
+                for i, row in species_filter_week.iterrows():
+                    nlong = int(self.res_rounder(abs(row['decimalLongitude'] - self.spatial_conf.x_start) / xres))
+                    nlat = int(self.res_rounder(abs(self.spatial_conf.y_end - row['decimalLatitude']) / yres))
+                    rst_week[nlat, nlong] = 1
+                rst_time_span = rst_time_span + rst_week
+
+            rst_result = np.where(extent_binary == 0, -9, rst_time_span / len(week_list))
+            date_target_log = f'{date_target_start.year}-{date_target_start.month:02d}-{date_target_start.day:02d}'
+            with rasterio.open(
+                os.path.join(self.k_out, f'k_{date_target_log}.tif'),
+                'w', 
+                height = extent_binary.shape[0], 
+                width = extent_binary.shape[1], 
+                count = 1, 
+                nodata = -9, 
+                crs = extent_crs, 
+                dtype = rasterio.float32, 
+                transform = extent_transform
+            ) as img:
+                img.write(rst_result, 1)
+
+            k_info['file_name'][date_target_log] = f'k_{date_target_log}.tif'
+
+            date_target_start = self.time_step(date_target_start)
+            date_target_end = self.time_span(date_target_start)
+            day_target_start = (date_target_start - self.date_start).days
+            day_target_end = (date_target_end - self.date_start).days
+
+        with open('./workspace/k_information.json', 'w') as f:
+            json.dump(k_info, f)        
+
+            
     def create_species_raster(self):
 
         if self.species_filter is None:
@@ -198,11 +602,16 @@ class RasterHelper:
                 data_t = data_s[(data_s['daysincebegin'].values < t_e) & (data_s['daysincebegin'].values >= t_s)]
                 rst = np.zeros([extent_binary.shape[0], extent_binary.shape[1]])
                 for i, row in data_t.iterrows():
-                    nlong = self.res_rounder(abs(row['decimalLongitude'] - self.spatial_conf.x_start) / xres, 0)
-                    nlat = self.res_rounder(abs(self.spatial_conf.y_end - row['decimalLatitude']) / yres, 0)
-                    rst[int(nlat), int(nlong)] = 1
+                    nlong = int(self.res_rounder(abs(row['decimalLongitude'] - self.spatial_conf.x_start) / xres))
+                    nlat = int(self.res_rounder(abs(self.spatial_conf.y_end - row['decimalLatitude']) / yres))
+                    try:
+                        rst[nlat, nlong] = 1
+                    except:
+                        print("Error: Occurrence Point of species: {sp} out of bounds.")
+                        print(f"Boundary: {extent_binary.shape}")
+                        print(f'{row["decimalLatitude"]}, {row["decimalLongitude"]} to {nlat}, {nlong}')
 
-                date_span = f"{date_s.strftime('%Y')}_{date_s.strftime('%m')}_{date_s.strftime('%d')}"
+                date_span = f"{date_s.strftime('%Y')}-{date_s.strftime('%m')}-{date_s.strftime('%d')}"
                 sp_data_span_tif = f"{sp}/{sp}_{date_span}.tif"
 
                 with rasterio.open(
@@ -231,227 +640,3 @@ class RasterHelper:
             
         self.sp_inf = sp_inf
 
-    def align_env(self, dir_input='./raw/env'):
-
-        self.env_aligned_out = './workspace/raster_data/env_aligned'
-        if not os.path.exists(self.env_aligned_out):
-            os.makedirs(self.env_aligned_out)
-        
-        extent_binary = gdal.Open('./workspace/extent_binary.tif')
-        extent_transform = extent_binary.GetGeoTransform()
-        extent_projection = extent_binary.GetProjection()
-
-        for env in self.env_conf.env_list:
-            env_raster_dir = os.path.join(self.env_aligned_out, env)
-            if not os.path.exists(env_raster_dir):
-                os.makedirs(env_raster_dir)
-            file_names = os.listdir(os.path.join(dir_input, env))
-            for file_name in file_names:
-                if not file_name.endswith(f'.{self.env_conf.ext}'):
-                    print (f'File name does not end with .{self.env_conf.ext}, ignoring file {file_name}.')
-                    continue
-                    
-                print(file_name, end='\r')
-                    
-                ds  = gdal.Open(os.path.join(dir_input, env, file_name), gdalconst.GA_ReadOnly)
-                in_trans = ds.GetGeoTransform()
-                in_proj = ds.GetProjection()
-
-                driver= gdal.GetDriverByName('GTiff')
-                output = driver.Create(os.path.join(env_raster_dir, file_name), 
-                                       extent_binary.GetRasterBand(1).XSize, 
-                                       extent_binary.GetRasterBand(1).YSize, 
-                                       1, 
-                                       gdalconst.GDT_Float32)
-
-                # 设置输出文件地理仿射变换参数与投影
-                output.SetGeoTransform(extent_transform)
-                output.SetProjection(extent_projection)
-
-                # 重投影，插值方法为双线性内插法
-                gdal.ReprojectImage(ds, output, in_proj, extent_projection, gdalconst.GRA_Bilinear)
-
-                ds = None
-                driver  = None
-                output = None
-                
-        extent_binary = None
-
-    def avg_timespan_env(self):
-
-        self.env_aligned_timespan_avg_out = './workspace/raster_data/env_aligned_timespan_avg'
-        if not os.path.exists(self.env_aligned_timespan_avg_out):
-            os.makedirs(self.env_aligned_timespan_avg_out)
-        
-        env_filename_templates = self.env_conf.env_filename_templates
-        
-        with rasterio.open('./workspace/extent_binary.tif') as raster_:
-            extent_transform = raster_.transform
-            extent_binary = raster_.read(1)
-            extent_crs = raster_.crs
-
-        env_info = dict()
-        env_info['dir_base'] = self.env_aligned_timespan_avg_out
-        env_info['info'] = dict()
-
-        for env in self.env_conf.env_list:
-
-            env_info['info'][env] = dict()
-            env_info['info'][env]['file_name'] = dict()
-
-            out_path_endswith_env_name = os.path.join(self.env_aligned_timespan_avg_out, env)
-            if not os.path.exists(out_path_endswith_env_name):
-                os.makedirs(out_path_endswith_env_name)
-
-            if env not in self.env_conf.env_no_need_avg:
-
-                date_target_start = self.date_start
-                date_target_end = date_target_start + relativedelta(years = self.year_span, months = (self.month_span-1), days = self.day_span)
-
-                raster_value_alltime = np.empty(0)
-                while date_target_end <= self.date_end:
-
-                    date_target_log = f'{date_target_start.year}_{date_target_start.month:02d}_{date_target_start.day:02d}'
-                    env_info['info'][env]['file_name'][date_target_log] = f'{env}/{env}_{date_target_log}_avg.tif'
-
-                    raster_avg = np.zeros(extent_binary.shape)
-                    for month_add in range(self.month_span):
-                        date_target_element = date_target_start + relativedelta(years = self.year_span, months = month_add, days = self.day_span)
-
-#                         env_aligned_file = f'wc2.1_2.5m_{env}_{date_target_element.year}-{date_target_element.month:02d}.tif'
-                        env_aligned_file = env_filename_templates[env].replace('[YYYY]', f'{date_target_element.year}').replace('[MM]', f'{date_target_element.month:02d}')
-                        
-                        with rasterio.open(os.path.join(self.env_aligned_out, f'{env}/{env_aligned_file}.tif')) as img:
-                            value = img.read(1)
-                    
-                        raster_avg = raster_avg + value
-                        
-                    raster_avg = raster_avg / self.month_span
-
-                    with rasterio.open(
-                        os.path.join(out_path_endswith_env_name,f'{env}_{date_target_log}_avg.tif'), 
-                        'w',
-                        height = extent_binary.shape[0],
-                        width = extent_binary.shape[1], 
-                        count = 1, 
-                        nodata = -9, 
-                        crs = extent_crs, 
-                        dtype = rasterio.float32,
-                        transform = extent_transform
-                    ) as img:
-                        img.write(raster_avg * extent_binary, 1)
-
-                    raster_value_alltime = np.concatenate((raster_value_alltime, raster_avg[extent_binary == 1]))
-                    
-                    date_target_start = self.time_step(date_target_start)
-                    date_target_end = date_target_start  + relativedelta(years = self.year_span, months = (self.month_span-1), days = self.day_span)
-
-                env_info['info'][env]['mean'] = np.mean(raster_value_alltime)
-                env_info['info'][env]['sd'] = np.std(raster_value_alltime)
-            else:
-                date_target_start = self.date_start
-                date_target_end = date_target_start + relativedelta(years = self.year_span, months = (self.month_span-1), days = self.day_span)
-
-                while date_target_end <= self.date_end:
-                    
-                    date_target_log = f'{date_target_start.year}_{date_target_start.month:02d}_{date_target_start.day:02d}'
-                    env_info['info'][env]['file_name'][date_target_log] = f'{env}/{env}_avg.tif'
-
-                    date_target_start = self.time_step(date_target_start)
-                    date_target_end = date_target_start  + relativedelta(years = self.year_span, months = (self.month_span-1), days = self.day_span)  
-
-                env_aligned_file = env_filename_templates[env]
-                with rasterio.open(os.path.join(self.env_aligned_out, f'{env}/{env_aligned_file}.tif')) as img:
-                    value = img.read(1)
-
-                with rasterio.open(
-                    os.path.join(out_path_endswith_env_name, f'{env}_avg.tif'), 
-                    'w', 
-                    height = extent_binary.shape[0], 
-                    width = extent_binary.shape[1], 
-                    count = 1, 
-                    nodata = -9, 
-                    crs = extent_crs, 
-                    dtype = rasterio.float32, 
-                    transform = extent_transform
-                ) as img:
-                    img.write(value * extent_binary, 1)
-
-                env_info['info'][env]['mean'] = np.mean(value[extent_binary == 1]).astype(float)
-                env_info['info'][env]['sd'] = np.std(value[extent_binary == 1]).astype(float)
-
-        with open('./workspace/env_information.json', 'w') as f:
-            json.dump(env_info, f)        
-    
-    #########################################
-        
-    def create_k_info(self):
-
-        self.k_out = './workspace/raster_data/k'
-        if not os.path.exists(self.k_out):
-            os.makedirs(self.k_out)
-        
-        k_info = dict()
-        k_info['dir_base'] = self.k_out
-        k_info['file_name'] = dict()
-
-        with rasterio.open('./workspace/extent_binary.tif') as raster_:
-            extent_transform = raster_.transform
-            extent_binary = raster_.read(1)
-            extent_crs = raster_.crs
-
-        xres = abs(extent_transform[0])
-        yres = abs(extent_transform[4])
-
-        if self.species_filter is None:
-            self.species_filter = pd.read_csv('./workspace/species_data/occurrence_data/species_occurrence_filter.csv')
-            self.species_list = np.unique(self.species_filter.species)
-
-        species_filter = self.species_filter.copy()
-        species_filter['week'] = species_filter.daysincebegin // 7
-
-        date_target_start = self.date_start
-        date_target_end = self.time_span(date_target_start)
-        day_target_start = (date_target_start - self.date_start).days
-        day_target_end = (date_target_end - self.date_start).days
-
-
-        while date_target_start <= self.date_end:
-            species_filter_day = species_filter[(species_filter.daysincebegin < day_target_end) & (species_filter.daysincebegin >= day_target_start)]
-            week_list = list(set(species_filter_day.week))
-
-            rst_time_span = np.zeros([extent_binary.shape[0], extent_binary.shape[1]])
-            
-            for week in week_list:
-                rst_week = np.zeros([extent_binary.shape[0], extent_binary.shape[1]])
-                species_filter_week = species_filter_day[species_filter_day.week == week]
-                for i, row in species_filter_week.iterrows():
-                    nlong = self.res_rounder(abs(row['decimalLongitude'] - self.spatial_conf.x_start) / xres, 0)
-                    nlat = self.res_rounder(abs(self.spatial_conf.y_end - row['decimalLatitude']) / yres, 0)
-                    rst_week[int(nlat), int(nlong)] = 1
-                rst_time_span = rst_time_span + rst_week
-
-            rst_result = np.where(extent_binary == 0, -9, rst_time_span / len(week_list))
-            date_target_log = f'{date_target_start.year}_{date_target_start.month:02d}_{date_target_start.day:02d}'
-            with rasterio.open(
-                os.path.join(self.k_out, f'k_{date_target_log}.tif'),
-                'w', 
-                height = extent_binary.shape[0], 
-                width = extent_binary.shape[1], 
-                count = 1, 
-                nodata = -9, 
-                crs = extent_crs, 
-                dtype = rasterio.float32, 
-                transform = extent_transform
-            ) as img:
-                img.write(rst_result, 1)
-
-            k_info['file_name'][date_target_log] = f'k_{date_target_log}.tif'
-
-            date_target_start = self.time_step(date_target_start)
-            date_target_end = self.time_span(date_target_start)
-            day_target_start = (date_target_start - self.date_start).days
-            day_target_end = (date_target_end - self.date_start).days
-
-        with open('./workspace/k_information.json', 'w') as f:
-            json.dump(k_info, f)        
