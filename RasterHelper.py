@@ -262,15 +262,14 @@ class RasterHelper:
                     # this part has not been tested yet
                     y = int(year)
                     m = int(month)
-                    env_out = conf['env_out_template'].replace('[YEAR]', f'{y:04d}')
-                    env_out = conf['env_out_template'].replace('[MONTH]', f'{m:02d}')
+                    env_out = conf['env_out_template'].replace('[YEAR]', f'{y:04d}').replace('[MONTH]', f'{m:02d}')
                     full_out_path = os.path.join(medium_env_dir, env)
                     if not os.path.isdir(full_out_path):
                         os.makedirs(full_out_path)
                     self.raw_to_medium_(f'{conf["raw_env_dir"]}/{fname}', f'{full_out_path}/{env_out}')
                     # fill no shit, missing data means missing data
                     self.env_medium_list[env][f'{y:04d}-{m:02d}'] = f'{full_out_path}/{env_out}'
-                    print(env_out)
+                    # print(env_out)
 
                 elif every_month:
                     m = int(month)
