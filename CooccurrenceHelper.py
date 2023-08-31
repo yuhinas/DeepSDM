@@ -101,7 +101,8 @@ class CooccurrenceHelper():
         self.species_filter = species_filter
 
 
-    def aggregate_cooccurrence_units(self, sp_filter_from=None):
+    def aggregate_cooccurrence_units(self, sp_filter_from=None, 
+                                     cooccurrence_day_mul=1, cooccurrence_xy_mul=1):
         start_time = time.time()
         def res_divider(a, b):
             digit_parts = str(b).split('.')
@@ -116,9 +117,12 @@ class CooccurrenceHelper():
             
         self.data_unit = dict()
         
-        sp_filter['daysincebeginUnit'] = ((sp_filter.daysincebegin - sp_filter.daysincebegin.min()) // self.cooccurrence_day_limit).astype(int)        
-        sp_filter['decimalLongitudeUnit'] = res_divider(sp_filter.decimalLongitude - self.x_start, self.spatial_conf.out_res).astype(int)
-        sp_filter['decimalLatitudeUnit'] = res_divider(sp_filter.decimalLatitude - self.y_start, self.spatial_conf.out_res).astype(int)
+        self.cooccurrence_day_mul = cooccurrence_day_mul
+        self.cooccurrence_xy_mul = cooccurrence_xy_mul
+        
+        sp_filter['daysincebeginUnit'] = ((sp_filter.daysincebegin - sp_filter.daysincebegin.min()) // (self.cooccurrence_day_limit * self.cooccurrence_day_mul)).astype(int)        
+        sp_filter['decimalLongitudeUnit'] = res_divider(sp_filter.decimalLongitude - self.x_start, self.spatial_conf.out_res * self.cooccurrence_xy_mul).astype(int)
+        sp_filter['decimalLatitudeUnit'] = res_divider(sp_filter.decimalLatitude - self.y_start, self.spatial_conf.out_res * self.cooccurrence_xy_mul).astype(int)
 
         def coocurr_agg (df, data_unit):
             t, x, y = df.name
@@ -175,8 +179,8 @@ class CooccurrenceHelper():
 
                         primary_indices[data_unit_str] = True
 
-                        pwd_spatial_satisfied = pairwise_distances(obsrvs1[['decimalLatitude', 'decimalLongitude']], obsrvs2[['decimalLatitude', 'decimalLongitude']]) < self.cooccurrence_xy_limit
-                        pwd_temporal_satisfied = pairwise_distances(obsrvs1[['day']], obsrvs2[['day']]) < self.cooccurrence_day_limit
+                        pwd_spatial_satisfied = pairwise_distances(obsrvs1[['decimalLatitude', 'decimalLongitude']], obsrvs2[['decimalLatitude', 'decimalLongitude']]) < self.cooccurrence_xy_mul * self.cooccurrence_xy_limit
+                        pwd_temporal_satisfied = pairwise_distances(obsrvs1[['day']], obsrvs2[['day']]) < self.cooccurrence_day_mul * self.cooccurrence_day_limit
                         pwd_satisfied = pwd_spatial_satisfied & pwd_temporal_satisfied
                         satisfied_idx = np.where(pwd_satisfied)
                         cooccur_satisfied_vals = np.stack([
@@ -193,7 +197,8 @@ class CooccurrenceHelper():
                             else:
                                 cooccur_counts_df = pd.concat([cooccur_counts_df, cooccur_local_unique_counts])
 
-            cooccur_counts_df = cooccur_counts_df.groupby(['sp1', 'sp2']).sum().reset_index()                    
+            if cooccur_counts_df is not None:
+                cooccur_counts_df = cooccur_counts_df.groupby(['sp1', 'sp2']).sum().reset_index()                    
         # save the cooccurrence csv
         cooccur_counts_df.to_csv(os.path.join(self.cooccurrence_dir, cooccurrence_counts_file), sep='\t', index=False)
         print(f'File: {os.path.join(self.cooccurrence_dir, cooccurrence_counts_file)} saved.')
@@ -206,61 +211,3 @@ class CooccurrenceHelper():
 #                 except:
 #                     # WHAT is `mat` ???
 #                     print(key, mat[key])
-
-                    
-                    
-                    
-    def count_cooccurrence(self, cooccurrence_counts_file='cooccurrence.csv'):
-        
-        data_unit = self.data_unit
-        
-        cooccurrence = dict()
-
-        for t in data_unit:
-            for x in data_unit[t]:
-                for y in data_unit[t][x]:
-                    for _, obsrv1 in data_unit[t][x][y].iterrows():
-
-                        neighbor_units = np.array(np.meshgrid([-1, 0, 1], [-1, 0, 1], [-1, 0, 1]), dtype=int).T.reshape(-1, 3)
-                        
-                        # Observations in the possibly co-occurrence temporal-spatial units
-                        for dt, dx, dy in neighbor_units:
-                            neighbor_t = t + dt
-                            if neighbor_t not in data_unit:
-                                continue
-
-                            neighbor_x = x + dx
-                            if neighbor_x not in data_unit[neighbor_t]:
-                                continue
-
-                            neighbor_y = y + dy
-                            if neighbor_y not in data_unit[neighbor_t][neighbor_x]:
-                                continue
-                                
-                            for _, obsrv2 in data_unit[neighbor_t][neighbor_x][neighbor_y].iterrows():
-                                if obsrv1['species'] == obsrv2['species']:
-                                    continue
-                                if ((self.get_distance(float(obsrv1['decimalLongitude']), 
-                                                       float(obsrv2['decimalLongitude']), 
-                                                       float(obsrv1['decimalLatitude']), 
-                                                       float(obsrv2['decimalLatitude'])) > self.cooccurrence_xy_limit) | 
-                                    (abs(obsrv1['daysincebegin'] - obsrv2['daysincebegin']) > self.cooccurrence_day_limit)):
-                                    continue
-                                    
-                                if (obsrv1['species'], obsrv2['species']) in cooccurrence:
-                                    cooccurrence[(obsrv1['species'], obsrv2['species'])] += 1
-                                elif (obsrv2['species'], obsrv1['species']) in cooccurrence:
-                                    cooccurrence[(obsrv2['species'], obsrv1['species'])] += 1
-                                else:
-                                    cooccurrence[(obsrv1['species'], obsrv2['species'])] = 1
-
-        # save the cooccurrence csv
-        with open(os.path.join(self.cooccurrence_dir, cooccurrence_counts_file), 'w', encoding='utf-8') as out_file:
-            out_file.write(f"sp1\tsp2\tcounts\n")
-            for key in cooccurrence:
-                try:
-                    out_file.write(f"{key[0]}\t{key[1]}\t{cooccurrence[key]}\n")
-                except:
-                    # WHAT is `mat` ???
-                    print(key, mat[key])
-        print(f'File: {os.path.join(self.cooccurrence_dir, cooccurrence_counts_file)} saved.')
