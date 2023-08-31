@@ -364,10 +364,10 @@ class LitUNetSDM(pl.LightningModule):
 
         num_of_dates = len(self.info.date_list_smoothviz)
 #         print(label_stack_smoothviz['species_date'])
-        ncols = 4
+        ncols = min(num_of_dates, 4)
         nrows = int(np.ceil(num_of_dates // ncols))
 
-        fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(12, 8))
+        fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(4*ncols, max(8,2*ncols*nrows)))
         # REFACTOR THE DATALOADING PROCEDURE WOULD HELP
 
         dataloaders_smoothviz = self.trainer.datamodule.smoothviz_dataloader()
@@ -447,15 +447,17 @@ class LitUNetSDM(pl.LightningModule):
             result_masked = result.where(extent == 1, nan_tensor)
             result_masked_npy = result_masked.cpu().numpy()
 
-            if dataloader_idx % ncols == 0:
-                for ax in axes.ravel():
-                    ax.clear()
-                
-            if nrows > 1:
-                ax = axes[int(dataloader_idx//ncols)][dataloader_idx%ncols]
-            else:
-                ax = axes[dataloader_idx%ncols]
-                
+            try:
+                if dataloader_idx % ncols == 0:
+                    for ax in axes.ravel():
+                        ax.clear()
+
+                if nrows > 1:
+                    ax = axes[int(dataloader_idx//ncols)][dataloader_idx%ncols]
+                else:
+                    ax = axes[dataloader_idx%ncols]
+            except:
+                ax = axes
             # if self.trainer.global_rank == 0:
             ax.imshow(result_masked_npy, cmap = 'coolwarm')
 
