@@ -12,11 +12,14 @@ from matplotlib import pyplot as plt
 import re
 
 class RasterHelper:
+    
     def __init__(self):
         super().__init__()
         
         self.species_filter = None
         self.species_list = None
+        
+        self.no_data = -9999
 
         if not os.path.exists('./workspace'):
             os.makedirs('./workspace')
@@ -53,6 +56,10 @@ class RasterHelper:
         self.spatial_conf = spatial_conf
         
         in_ds = gdal.Open(input_env, gdalconst.GA_ReadOnly)
+        
+#         in_nodata = in_ds.GetRasterBand(1).GetNoDataValue()
+#         assert(in_nodata is not None)
+        
         _, xres, _, _, _, yres = in_ds.GetGeoTransform()
         in_proj = in_ds.GetProjection()
 
@@ -90,6 +97,7 @@ class RasterHelper:
         driver = gdal.GetDriverByName('GTiff')
         output = driver.Create('workspace/extent_env_example.tif', self.spatial_conf.x_num_cells, self.spatial_conf.y_num_cells, 1, gdalconst.GDT_Float32)
 
+        output.GetRasterBand(1).SetNoDataValue(self.no_data)
         # 
         output.SetGeoTransform(out_trans)
         output.SetProjection(in_proj)
@@ -109,7 +117,7 @@ class RasterHelper:
         in_proj = in_ds.GetProjection()
 
         extent_array = in_ds.ReadAsArray()
-        extent_array = np.where(extent_array == 0, 0, 1)
+        extent_array = np.where(extent_array == self.no_data, 0, 1)
 
         driver= gdal.GetDriverByName('GTiff')
         output = driver.Create('workspace/extent_binary.tif', self.spatial_conf.x_num_cells, self.spatial_conf.y_num_cells, 1, gdalconst.GDT_Int16)
@@ -141,6 +149,7 @@ class RasterHelper:
                                gdalconst.GDT_Float32)
 
         # 设置输出文件地理仿射变换参数与投影
+        dst_tif.GetRasterBand(1).SetNoDataValue(self.no_data)
         dst_tif.SetGeoTransform(dst_transform)
         dst_tif.SetProjection(dst_projection)
 
@@ -174,14 +183,17 @@ class RasterHelper:
             src_trans = src_tif.GetGeoTransform()
             src_proj = src_tif.GetProjection()
             
-            mem_driver= gdal.GetDriverByName('MEM')
-            mem_tif = mem_driver.Create("", 
+            #mem_driver= gdal.GetDriverByName('MEM')
+            # not really mem driver
+            mem_driver= gdal.GetDriverByName('GTiff')
+            mem_tif = mem_driver.Create("/tmp/deepsdm/not_really_mem_driver.tif", 
                                    destination.RasterXSize, 
                                    destination.RasterYSize, 
                                    1, 
                                    gdalconst.GDT_Float32)
         
             # 设置输出文件地理仿射变换参数与投影
+            mem_tif.GetRasterBand(1).SetNoDataValue(np.nan)
             mem_tif.SetGeoTransform(dst_transform)
             mem_tif.SetProjection(dst_projection)
 
@@ -189,13 +201,25 @@ class RasterHelper:
             gdal.ReprojectImage(src_tif, mem_tif, src_proj, dst_projection, gdalconst.GRA_Bilinear)
             
             mem_raster_arrs.append(mem_tif.GetRasterBand(1).ReadAsArray())
+            mem_tif = None
         
-        mem_raster_arr_avg = np.stack(mem_raster_arrs).mean(axis=0)
+        mem_raster_arr_avg = np.nanmean(np.stack(mem_raster_arrs), axis=0)
+        
+        mem_raster_arr_avg = np.where(np.isnan(mem_raster_arr_avg), self.no_data, mem_raster_arr_avg)
             
         dst_driver = gdal.GetDriverByName('GTiff')
-        dst_tif = dst_driver.CreateCopy(medium_env_tifs[0], mem_tif)
-        
+        #dst_tif = dst_driver.CreateCopy(medium_env_tifs[0], mem_tif)
+
+        dst_tif = mem_driver.Create(medium_env_tifs[0], 
+                               destination.RasterXSize, 
+                               destination.RasterYSize, 
+                               1, 
+                               gdalconst.GDT_Float32)
+
+        dst_tif.SetGeoTransform(dst_transform)
+        dst_tif.SetProjection(dst_projection)
         dst_tif.GetRasterBand(1).WriteArray(mem_raster_arr_avg)
+        dst_tif.GetRasterBand(1).SetNoDataValue(self.no_data)
             
         destination = None
         src_tif = None
@@ -407,7 +431,7 @@ class RasterHelper:
                     
             env_unique_srcs = np.unique(env_srcs)
 
-            env_span_avgs = np.empty(0)
+            env_collection_of_spans = np.empty(0)
             for i in range(y_m_combs.shape[0]):
                 y0, m0 = y_m_combs[i]
                 y0_m0 = f'{y0:04d}-{m0:02d}'
@@ -422,7 +446,9 @@ class RasterHelper:
                         with rasterio.open(self.env_medium_list[env][y_m]) as env_raster:
                             env_local_srcs.append(self.env_medium_list[env][y_m])
                             env_local_src_ids.append(np.where(env_unique_srcs==self.env_medium_list[env][y_m])[0][0])
-                            env_arrs.append(env_raster.read(1))
+                            env_arr_ = env_raster.read(1)
+                            env_arr_ = np.where(env_arr_==self.no_data, np.nan, env_arr_)
+                            env_arrs.append(env_arr_)
                             env_crs = env_raster.crs
                             env_transform = env_raster.transform
                     else:
@@ -435,6 +461,9 @@ class RasterHelper:
                     assert(len(env_local_src_ids) == len(env_local_srcs))
 
                 fname_base = '.'.join(os.path.basename(self.env_medium_list[env][y0_m0]).split('.')[:-1])
+                if fname_base == '':
+                    print(env, y0_m0, self.env_medium_list[env][y0_m0])
+                    fname_base = f'{env}_{y0_m0}_src_missing'
 
                 srcs_, cnts_ = np.unique(env_local_src_ids, return_counts = True)
                 postfixs = []
@@ -453,7 +482,14 @@ class RasterHelper:
 
                 env_info['info'][env][y0_m0]['tif_span_avg'] = path_name
                 env_info['info'][env][y0_m0]['tif_sources'] = list(env_unique_srcs[srcs_])
-                env_arr_span_avg = np.stack(env_arrs).mean(axis=0)
+                env_arr_span_avg = np.nanmean(np.stack(env_arrs), axis=0)
+                
+                env_cell_avg = np.nanmean(np.stack(env_arrs))
+                
+                env_arr_span_avg = np.where(np.isnan(env_arr_span_avg), self.no_data, env_arr_span_avg)
+                
+                # fill in the missing cells with cell avg
+                env_arr_span_avg = np.where((mask==1)&(env_arr_span_avg==self.no_data), env_cell_avg, env_arr_span_avg)
 
                 with rasterio.open(
                     os.path.join(path_name), 
@@ -461,17 +497,17 @@ class RasterHelper:
                     height = env_arr_span_avg.shape[0],
                     width = env_arr_span_avg.shape[1], 
                     count = 1, 
-                    nodata = -9, 
+                    nodata = self.no_data, 
                     crs = env_crs, 
                     dtype = rasterio.float32,
                     transform = env_transform
                 ) as tif_out:
-                    tif_out.write(env_arr_span_avg * mask, 1)
+                    tif_out.write(env_arr_span_avg, 1)
 
-                env_span_avgs = np.concatenate((env_span_avgs, env_arr_span_avg[mask == 1]))
+                env_collection_of_spans = np.concatenate((env_collection_of_spans, env_arr_span_avg[mask == 1]))
 
-            env_info['info'][env]['mean'] = np.mean(env_span_avgs)
-            env_info['info'][env]['sd'] = np.std(env_span_avgs)
+            env_info['info'][env]['mean'] = np.mean(env_collection_of_spans)
+            env_info['info'][env]['sd'] = np.std(env_collection_of_spans)
 
         with open('./workspace/env_information.json', 'w') as f:
             json.dump(env_info, f)        
@@ -527,7 +563,7 @@ class RasterHelper:
                     rst_week[nlat, nlong] = 1
                 rst_time_span = rst_time_span + rst_week
 
-            rst_result = np.where(extent_binary == 0, -9, rst_time_span / len(week_list))
+            rst_result = np.where(extent_binary == 0, self.no_data, rst_time_span / len(week_list))
             date_target_log = f'{date_target_start.year}-{date_target_start.month:02d}-{date_target_start.day:02d}'
             with rasterio.open(
                 os.path.join(self.k_out, f'k_{date_target_log}.tif'),
@@ -535,7 +571,7 @@ class RasterHelper:
                 height = extent_binary.shape[0], 
                 width = extent_binary.shape[1], 
                 count = 1, 
-                nodata = -9, 
+                nodata = self.no_data,
                 crs = extent_crs, 
                 dtype = rasterio.float32, 
                 transform = extent_transform
@@ -619,7 +655,7 @@ class RasterHelper:
                     height = extent_binary.shape[0], 
                     width = extent_binary.shape[1],
                     count = 1, 
-                    nodata = -9, 
+                    nodata = self.no_data, 
                     crs = extent_crs, 
                     dtype = rasterio.int16, 
                     transform = extent_transform
