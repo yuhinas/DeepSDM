@@ -110,11 +110,11 @@ class CooccurrenceHelper():
             num_digits_after_decimal = min(len(digit_parts[1]), 6)
             return round(a / b, num_digits_after_decimal)
 
-        if sp_filter_from is None:
-            sp_filter = self.species_filter.copy()
-        else:
-            sp_filter = pd.read_csv(sp_filter_from)
-            
+        if sp_filter_from is not None:
+            self.sp_filter = pd.read_csv(sp_filter_from)
+
+        sp_filter = self.species_filter.copy()            
+        
         self.data_unit = dict()
         
         self.cooccurrence_day_mul = cooccurrence_day_mul
@@ -200,6 +200,16 @@ class CooccurrenceHelper():
             if cooccur_counts_df is not None:
                 cooccur_counts_df = cooccur_counts_df.groupby(['sp1', 'sp2']).sum().reset_index()                    
         # save the cooccurrence csv
+        
+        
+        sp_list = self.sp_filter.species.unique()
+        sp_list.sort()
+        sp_combs_df = pd.DataFrame(np.array(np.meshgrid(sp_list, sp_list)).T.reshape(-1, 2), columns=['sp1', 'sp2'])
+        sp_combs_df['counts'] = 0
+        
+        cooccur_counts_df = pd.concat([cooccur_counts_df, sp_combs_df])
+        cooccur_counts_df = cooccur_counts_df.groupby(['sp1', 'sp2']).head(1)
+        
         cooccur_counts_df.to_csv(os.path.join(self.cooccurrence_dir, cooccurrence_counts_file), sep='\t', index=False)
         print(f'File: {os.path.join(self.cooccurrence_dir, cooccurrence_counts_file)} saved.')
         print(f'Counting cooccurrence costs {time.time() - start_time} seconds.')

@@ -80,7 +80,10 @@ class TrainEmbedding:
         species2idx = dict()
         Xs = []
         ys = []
+        nXs = []
 
+        # trashmai changed the cooccurrence output to sp combos with 0 count, for a full species list
+        # othewise, the idx2sp will only have species name with > 0 counts
         matrix = pd.read_csv(os.path.join(self.output_dir, f'cooccurrence_data/{self.cooccurrence_counts_file}'), sep = '\t')
         for i, lines in matrix.iterrows() :
             sp1 = lines['sp1']
@@ -88,14 +91,21 @@ class TrainEmbedding:
             cooccur_counts = lines['counts']
             if sp1 == sp2:
                 continue
+                
+            # ~!@#$%^&*()_+
             if sp1 not in species2idx:
                 species2idx[sp1] = len(idx2species)
                 idx2species[len(idx2species)] = sp1
             if sp2 not in species2idx:
                 species2idx[sp2] = len(idx2species)
                 idx2species[len(idx2species)] = sp2
-            Xs.append((species2idx[sp1], species2idx[sp2]))
-            ys.append(float(cooccur_counts))
+
+            # positive samples
+            if cooccur_counts > 0:
+                Xs.append((species2idx[sp1], species2idx[sp2]))
+                ys.append(float(cooccur_counts))
+            else:
+                nXs.append((species2idx[sp1], species2idx[sp2]))
             
         with open(os.path.join(self.embedding_dir, self.idx2species_file), 'w') as out_file:
             for key in sorted(idx2species.keys()):
@@ -105,12 +115,13 @@ class TrainEmbedding:
                     print(key, idx2species[key])
 
         print(f'embedding size = ({len(idx2species)}, {self.num_vector})')
-        print(f'number of data = {len(Xs)}')
+        print(f'number of data = positive: {len(Xs)} + negative: {len(nXs)}')
         print(f'batch_size = {self.batch_size}; num_neg = {self.num_neg}')
 
         self.idx2species = idx2species
         self.Xs = Xs
         self.ys = ys
+        self.nXs = np.array(nXs)
 
 
     def setup(self):
@@ -137,13 +148,25 @@ class TrainEmbedding:
             for (train_batch, label_batch) in self.train_dataloader:
 
                 # Negative sampling for column
-                neg_smpls = np.zeros(self.num_neg)
+#                 neg_smpls = np.zeros(self.num_neg)
+#                 for i in range(train_batch.shape[0]):
+#                     delta = random.sample(list(range(len(self.idx2species))), self.num_neg)
+#                     neg_smpls = np.vstack([neg_smpls, delta])
+#                 neg_cols = torch.tensor(neg_smpls[1:].reshape(-1), dtype=torch.long)
+#                 neg_rows = train_batch[:, 0].repeat(self.num_neg)
+#                 neg_idxs = torch.vstack([neg_rows, neg_cols])
+                
+                # minor expelling each other in the cooccurrence groups
+                pseudo_neg1_smpls = []
                 for i in range(train_batch.shape[0]):
-                    delta = random.sample(list(range(len(self.idx2species))), self.num_neg)
-                    neg_smpls = np.vstack([neg_smpls, delta])
-                neg_cols = torch.tensor(neg_smpls[1:].reshape(-1), dtype=torch.long)
-                neg_rows = train_batch[:, 0].repeat(self.num_neg)
-                neg_idxs = torch.vstack([neg_rows, neg_cols])
+                    delta = random.sample(range(len(self.idx2species)), self.num_neg)
+                    pseudo_neg1_smpls.extend(delta)
+                pseudo_neg1_idxs = torch.vstack([train_batch[:, 0].repeat(self.num_neg), torch.tensor(pseudo_neg1_smpls)])
+                
+                # minor expelling each other in the non-cooccurrence groups
+                pseudo_neg2_idxs = torch.from_numpy(self.nXs[random.sample(range(self.nXs.shape[0]), min(self.nXs.shape[0], self.num_neg * train_batch.shape[0]))].reshape(2, -1))
+
+                neg_idxs = torch.hstack([pseudo_neg1_idxs, pseudo_neg2_idxs])
 
                 # Model Prediction and loss calculation
                 loss = self.EM(train_batch.T.to(self.dev), label_batch.to(self.dev), neg_idxs.to(self.dev), self.num_neg)
