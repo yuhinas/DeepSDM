@@ -211,7 +211,7 @@ class Unet(nn.Module):
 #         image_output = self.sigmoid(self.image1(conv9))
         image_output = self.image1(conv9)
 #         conv9 = self.image1(conv9)
-# #         image_output = self.batch_norm(conv9)
+#         image_output = self.batch_norm(conv9)
 #         image_output = F.instance_norm(conv9)
         return image_output
     

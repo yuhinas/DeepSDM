@@ -111,7 +111,7 @@ class CooccurrenceHelper():
             return round(a / b, num_digits_after_decimal)
 
         if sp_filter_from is not None:
-            self.sp_filter = pd.read_csv(sp_filter_from)
+            self.species_filter = pd.read_csv(sp_filter_from)
 
         sp_filter = self.species_filter.copy()            
         
@@ -202,7 +202,7 @@ class CooccurrenceHelper():
         # save the cooccurrence csv
         
         
-        sp_list = self.sp_filter.species.unique()
+        sp_list = self.species_filter.species.unique()
         sp_list.sort()
         sp_combs_df = pd.DataFrame(np.array(np.meshgrid(sp_list, sp_list)).T.reshape(-1, 2), columns=['sp1', 'sp2'])
         sp_combs_df['counts'] = 0
