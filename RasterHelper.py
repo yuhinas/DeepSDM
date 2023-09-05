@@ -675,3 +675,78 @@ class RasterHelper:
             
         self.sp_inf = sp_inf
 
+    def raw_to_medium_CCI(self, CCI_conf):
+        for env in CCI_conf:
+            for conf in CCI_conf[env]:
+                print(conf)
+                self.build_env_CCI_(env, conf) 
+                
+    def build_env_CCI_(self, env, conf):
+        pattern = conf['filename_template'].replace('[YEAR]', r'(?P<year>\d{4})') + '$'
+        # Convert template to regex pattern
+        regex = re.compile(pattern)
+
+        medium_env_dir = 'medium'
+        for value in conf['unique_class']:
+            path = os.path.join(medium_env_dir, f'{env}_{str(value)}')
+            if not os.path.isdir(path):
+                os.makedirs(path)  
+            
+        every_year = False
+        for fname in os.listdir(conf['raw_env_dir']):
+
+            # Filter files based on the regex pattern
+            matched = regex.search(fname)
+            if matched:
+                try:
+                    year = matched.group('year')
+                    every_year = True
+                except:
+                    pass
+            if every_year:
+                y = int(year)
+                env_out = conf['env_out_template'].replace('[YEAR]', f'{y:04d}')
+                self.raw_to_medium_CCI_(f'{conf["raw_env_dir"]}/{fname}', f'{medium_env_dir}/{env_out}', conf['layer_name'], conf["unique_class"])
+        
+    def raw_to_medium_CCI_(self, raw_env_nc, medium_env_tif, layer_name, unique_class):
+        destination = gdal.Open('./workspace/extent_binary.tif')
+        dst_transform = destination.GetGeoTransform()
+        dst_projection = destination.GetProjection()
+
+        src_nc  = gdal.Open(f'NETCDF:{raw_env_nc}:{layer_name}', gdalconst.GA_ReadOnly)
+        src_proj = src_nc.GetProjection()
+
+        dst_driver= gdal.GetDriverByName('GTiff')
+        dst_tif = dst_driver.Create('/tmp/not_really_mem_driver.tif', 
+                                    destination.RasterXSize, 
+                                    destination.RasterYSize, 
+                                    1, 
+                                    gdalconst.GDT_Int32)
+        dst_tif.SetGeoTransform(dst_transform)
+        dst_tif.SetProjection(dst_projection)
+        gdal.ReprojectImage(src_nc, dst_tif, src_proj, dst_projection, gdalconst.GRA_Mode)
+        dst_value = dst_tif.GetRasterBand(1).ReadAsArray()
+        dst_tif = None
+        dst_driver = None
+        src_nc = None
+        
+        
+        for value in unique_class:
+            dst_unique_value = np.where(dst_value == value, 1, 0)
+            dst_driver= gdal.GetDriverByName('GTiff')
+            dst_tif = dst_driver.Create(medium_env_tif.replace('[CLASS]', str(value)), 
+                                        destination.RasterXSize, 
+                                        destination.RasterYSize, 
+                                        1, 
+                                        gdalconst.GDT_Int32)
+
+            # 设置输出文件地理仿射变换参数与投影
+            dst_tif.GetRasterBand(1).WriteArray(dst_unique_value)
+            dst_tif.GetRasterBand(1).SetNoDataValue(self.no_data)
+            dst_tif.SetGeoTransform(dst_transform)
+            dst_tif.SetProjection(dst_projection)
+
+            dst_driver  = None
+            dst_tif = None
+        
+        destination = None
