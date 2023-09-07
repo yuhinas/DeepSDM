@@ -773,7 +773,7 @@ class RasterHelper:
         
         for env in CCI_conf:
             for conf in CCI_conf[env]:
-                print(conf)
+                pass
         
         df_landcover = pd.DataFrame()
         for value in self.CCI_value:
