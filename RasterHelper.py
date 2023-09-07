@@ -686,7 +686,7 @@ class RasterHelper:
                 print(conf)
                 self.build_env_CCI_(env, conf) 
         if conf['PCA'] != None:
-            self.CCI_PCA(conf)
+            self.CCI_PCA(CCI_conf)
     def build_env_CCI_(self, env, conf):
         pattern = conf['filename_template'].replace('[YEAR]', r'(?P<year>\d{4})') + '$'
         # Convert template to regex pattern
@@ -769,7 +769,12 @@ class RasterHelper:
         
         destination = None
         
-    def CCI_PCA(self, conf):
+    def CCI_PCA(self, CCI_conf):
+        
+        for env in CCI_conf:
+            for conf in CCI_conf[env]:
+                print(conf)
+        
         df_landcover = pd.DataFrame()
         for value in self.CCI_value:
             df_landcover = pd.concat((df_landcover, pd.DataFrame(value)), axis = 1)
@@ -822,3 +827,11 @@ class RasterHelper:
                 dst_driver  = None
                 dst_tif = None 
         destination = None
+        
+        
+        for year in self.CCI_PCA_year:
+            for month in range(1, 13):
+                for pc in range(num_components):
+                    if f'landcover_PC{pc:02d}' not in self.env_medium_list:
+                        self.env_medium_list[f'landcover_PC{pc:02d}'] = {}
+                    self.env_medium_list[f'landcover_PC{pc:02d}'][f'{year:04d}-{month:02d}'] = os.path.join(medium_env_dir, f'landcover_PC{pc:02d}', f'landcover_PC{pc:02d}_{year:04d}.tif')
