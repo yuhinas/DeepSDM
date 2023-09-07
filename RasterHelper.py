@@ -10,6 +10,7 @@ from osgeo import gdalconst
 import cv2
 from matplotlib import pyplot as plt
 import re
+from sklearn.decomposition import PCA
 
 class RasterHelper:
     
@@ -231,9 +232,7 @@ class RasterHelper:
         pattern = conf['filename_template'].replace('[YEAR]', r'(?P<year>\d{4})').replace('[MONTH]', r'(?P<month>\d{1,2})').replace('[DOY]', r'(?P<doy>\d{3})') + '$'
         # Convert template to regex pattern
         regex = re.compile(pattern)
-        every_year = False
-        every_month = False
-        with_doy = False
+
         medium_env_dir = 'medium'
 
         if env not in self.env_medium_list:
@@ -258,6 +257,10 @@ class RasterHelper:
             month = None
             doy = None
 
+            every_year = False
+            every_month = False
+            with_doy = False
+            
             # Filter files based on the regex pattern
             matched = regex.search(fname)
             if matched:
@@ -676,25 +679,28 @@ class RasterHelper:
         self.sp_inf = sp_inf
 
     def raw_to_medium_CCI(self, CCI_conf):
+        self.CCI_PCA_year = []
         for env in CCI_conf:
+            self.CCI_value = np.empty((len(CCI_conf[env][0]['unique_class']), ), dtype = object)
             for conf in CCI_conf[env]:
                 print(conf)
                 self.build_env_CCI_(env, conf) 
-                
+        if conf['PCA'] != None:
+            self.CCI_PCA(conf)
     def build_env_CCI_(self, env, conf):
         pattern = conf['filename_template'].replace('[YEAR]', r'(?P<year>\d{4})') + '$'
         # Convert template to regex pattern
         regex = re.compile(pattern)
 
         medium_env_dir = 'medium'
-        for value in conf['unique_class']:
-            path = os.path.join(medium_env_dir, f'{env}_{str(value)}')
-            if not os.path.isdir(path):
-                os.makedirs(path)  
+        if conf['PCA'] == None:
+            for value in conf['unique_class']:
+                path = os.path.join(medium_env_dir, f'{env}_type{value:03d}')
+                if not os.path.isdir(path):
+                    os.makedirs(path)  
             
-        every_year = False
         for fname in os.listdir(conf['raw_env_dir']):
-
+            every_year = False
             # Filter files based on the regex pattern
             matched = regex.search(fname)
             if matched:
@@ -703,17 +709,19 @@ class RasterHelper:
                     every_year = True
                 except:
                     pass
-            if every_year:
-                y = int(year)
-                env_out = conf['env_out_template'].replace('[YEAR]', f'{y:04d}')
-                self.raw_to_medium_CCI_(f'{conf["raw_env_dir"]}/{fname}', f'{medium_env_dir}/{env_out}', conf['layer_name'], conf["unique_class"])
-        
-    def raw_to_medium_CCI_(self, raw_env_nc, medium_env_tif, layer_name, unique_class):
+                if every_year:
+                    y = int(year)
+                    env_out = conf['env_out_template'].replace('[YEAR]', f'{y:04d}')
+                    self.CCI_PCA_year.append(y)
+                    self.raw_to_medium_CCI_(f'{conf["raw_env_dir"]}/{fname}', f'{medium_env_dir}/{env_out}', conf)
+
+
+    def raw_to_medium_CCI_(self, raw_env_nc, medium_env_tif, conf):
         destination = gdal.Open('./workspace/extent_binary.tif')
         dst_transform = destination.GetGeoTransform()
         dst_projection = destination.GetProjection()
 
-        src_nc  = gdal.Open(f'NETCDF:{raw_env_nc}:{layer_name}', gdalconst.GA_ReadOnly)
+        src_nc  = gdal.Open(f'NETCDF:{raw_env_nc}:{conf["layer_name"]}', gdalconst.GA_ReadOnly)
         src_proj = src_nc.GetProjection()
 
         dst_driver= gdal.GetDriverByName('GTiff')
@@ -730,23 +738,87 @@ class RasterHelper:
         dst_driver = None
         src_nc = None
         
-        
-        for value in unique_class:
-            dst_unique_value = np.where(dst_value == value, 1, 0)
-            dst_driver= gdal.GetDriverByName('GTiff')
-            dst_tif = dst_driver.Create(medium_env_tif.replace('[CLASS]', str(value)), 
-                                        destination.RasterXSize, 
-                                        destination.RasterYSize, 
-                                        1, 
-                                        gdalconst.GDT_Int32)
+        # without PCA
+        # directly export all the tiffs
+        if conf['PCA'] == None:
+            for value in conf['unique_class']:
+                dst_unique_value = np.where(dst_value == value, 1, 0)
+                dst_driver= gdal.GetDriverByName('GTiff')
+                dst_tif = dst_driver.Create(medium_env_tif.replace('[CLASS]', f'type{value:03d}'), 
+                                            destination.RasterXSize, 
+                                            destination.RasterYSize, 
+                                            1, 
+                                            gdalconst.GDT_Int32)
 
-            # 设置输出文件地理仿射变换参数与投影
-            dst_tif.GetRasterBand(1).WriteArray(dst_unique_value)
-            dst_tif.GetRasterBand(1).SetNoDataValue(self.no_data)
-            dst_tif.SetGeoTransform(dst_transform)
-            dst_tif.SetProjection(dst_projection)
+                dst_tif.GetRasterBand(1).WriteArray(dst_unique_value)
+                dst_tif.GetRasterBand(1).SetNoDataValue(self.no_data)
+                dst_tif.SetGeoTransform(dst_transform)
+                dst_tif.SetProjection(dst_projection)
 
-            dst_driver  = None
-            dst_tif = None
+                dst_driver  = None
+                dst_tif = None
         
+        # with PCA
+        else:
+            for i, value in enumerate(conf['unique_class']):
+                dst_unique_value = np.where(dst_value == value, 1, 0)
+                if self.CCI_value[i] is None:
+                    self.CCI_value[i] = dst_unique_value.reshape(-1)
+                else:
+                    self.CCI_value[i] = np.concatenate((self.CCI_value[i], dst_unique_value.reshape(-1)))      
+        
+        destination = None
+        
+    def CCI_PCA(self, conf):
+        df_landcover = pd.DataFrame()
+        for value in self.CCI_value:
+            df_landcover = pd.concat((df_landcover, pd.DataFrame(value)), axis = 1)
+        df_landcover = df_landcover.set_axis(conf['unique_class'], axis = 1)
+        
+        pca = PCA()
+        pca.fit(df_landcover)
+        self.CCI_PCA_value = pca.transform(df_landcover)
+        self.CCI_PCA_components = pca.components_
+        self.CCI_PCA_variance_ratio = pca.explained_variance_ratio_
+        
+        # decide how many components should be logged 
+        num_components = 0
+        while True:
+            if self.CCI_PCA_variance_ratio[:num_components].sum() >= conf['PCA']:
+                break
+            num_components += 1
+        print(f'{num_components} components have been chosen.')
+        print(f'Explain {self.CCI_PCA_variance_ratio[:num_components].sum()*100}% of variance. ')
+        
+        # export the pca-value landcover layers
+        destination = gdal.Open('./workspace/extent_binary.tif')
+        dst_transform = destination.GetGeoTransform()
+        dst_projection = destination.GetProjection()
+        
+        num_cell = self.CCI_PCA_value.shape[0] // len(self.CCI_PCA_year)
+        medium_env_dir = 'medium'
+        for i, year in enumerate(self.CCI_PCA_year):
+            for n_com in range(num_components):
+                medium_env_tif = os.path.join(medium_env_dir, conf['env_out_template']).replace('[CLASS]', f'PC{n_com:02d}').replace('[YEAR]', f'{year:04d}')
+                
+                # create folder 'land_cover_PCXX'
+                if not os.path.exists('/'.join(medium_env_tif.split('/')[:-1])):
+                    os.makedirs('/'.join(medium_env_tif.split('/')[:-1]))
+                
+                rst_value = self.CCI_PCA_value[i*num_cell:(i+1)*num_cell, n_com]
+                rst_value = rst_value.reshape(self.spatial_conf.y_num_cells, self.spatial_conf.x_num_cells)
+                dst_driver = gdal.GetDriverByName('GTiff')
+                dst_tif = dst_driver.Create(medium_env_tif, 
+                                            destination.RasterXSize, 
+                                            destination.RasterYSize, 
+                                            1, 
+                                            gdalconst.GDT_Float32)
+
+                dst_tif.GetRasterBand(1).WriteArray(rst_value)
+                dst_tif.GetRasterBand(1).SetNoDataValue(self.no_data)
+                dst_tif.SetGeoTransform(dst_transform)
+                dst_tif.SetProjection(dst_projection)
+
+                dst_driver  = None
+                dst_tif = None 
         destination = None
