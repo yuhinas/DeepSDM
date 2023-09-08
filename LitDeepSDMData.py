@@ -91,6 +91,8 @@ class LitDeepSDMData(pl.LightningDataModule):
                 with rasterio.open(os.path.join(self.env_inf['dir_base'], f"{self.env_inf['info'][env_][y_m]['tif_span_avg']}")) as f:
                     img_ = ToTensor()(f.read(1)).cuda()
                 img = img_.where(self.geo_extent.cuda() == 1, torch.normal(self.env_inf['info'][env_]['mean'], self.env_inf['info'][env_]['sd'], img_.shape).cuda())
+                
+                # environment factors which should be normalized
                 if env_ not in self.info.non_normalize_env_list:
                     img_norm = (img - self.env_inf['info'][env_]['mean']) / self.env_inf['info'][env_]['sd']
                 else:
