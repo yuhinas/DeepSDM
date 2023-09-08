@@ -8,7 +8,7 @@ from LitDeepSDMData import LitDeepSDMData
 from LitUNetSDM import LitUNetSDM
 
 # List those environment rasters for training, must be equal to or be a subset of env_list in step 01_prepare_data.
-env_list = ['tmax', 'tmin', 'prec', 'elev', 'evi']
+env_list = ['clt', 'cmi', 'hurs', 'pet', 'pr', 'rsds', 'sfcWind', 'tas', 'tasmax', 'tasmin', 'vpd', 'landcover_PC00', 'landcover_PC01', 'landcover_PC02', 'landcover_PC03', 'landcover_PC04', 'landcover_PC05', 'landcover_PC06', 'landcover_PC07']
 # Those environment rasters that don't need normalization or are already normalized, e.g. PCA results.
 non_normalize_env_list = []
 
@@ -18,19 +18,19 @@ date_list = []
 # The python range exclude the stop value (here e.g. 2020)
 # So here we generate from 2016_01_01 to 2019_12_01
 # We keep data of 2020 for validation/prediction
-for y_ in range(2000, 2020):
+for y_ in range(2000, 2019):
     for m_ in range(1, 13):
         date_list.append(f'{y_:04d}-{m_:02d}-01')
 
 # list of species that selected for training
-# species_list = ['Psilopogon_nuchalis', 'Yuhina_brunneiceps', 'Corvus_macrorhynchos', 'Zosterops_simplex', 'Passer_montanus', 'Spilopelia_chinensis', 'Acridotheres_javanicus']
-species_list = ['Passer_cinnamomeus', 'Carpodacus_formosanus', 'Acridotheres_cristatellus', 'Nisaetus_nipalensis', 'Corvus_macrorhynchos', 'Pycnonotus_taivanus', 'Glaucidium_brodiei', 'Psilopogon_nuchalis', 'Treron_sieboldii', 'Lonchura_atricapilla', 'Prunella_collaris', 'Hirundapus_cochinchinensis', 'Alauda_gulgula', 'Pycnonotus_sinensis', 'Threskiornis_aethiopicus', 'Suthora_verreauxi', 'Garrulax_ruficeps', 'Centropus_bengalensis', 'Treron_formosae', 'Anas_platyrhynchos', 'Ptilinopus_leclancheri', 'Rhyacornis_fuliginosa', 'Acridotheres_tristis', 'Otus_lettia', 'Enicurus_scouleri', 'Spizixos_semitorques', 'Euodice_malabarica', 'Ketupa_flavipes', 'Garrulax_taewanus', 'Motacilla_alba', 'Sitta_europaea', 'Tarsiger_johnstoniae', 'Poecile_varius', 'Elanus_caeruleus', 'Alcippe_morrisonia', 'Oriolus_traillii', 'Ardea_purpurea', 'Phasianus_colchicus', 'Horornis_acanthizoides', 'Strix_nivicolum', 'Lophura_swinhoii', 'Delichon_dasypus', 'Lonchura_striata', 'Yuhina_brunneiceps', 'Gracupica_nigricollis', 'Myophonus_insularis', 'Periparus_ater', 'Zosterops_simplex', 'Syrmaticus_mikado', 'Prinia_flaviventris']
+species_list = ['Psilopogon_nuchalis', 'Yuhina_brunneiceps', 'Corvus_macrorhynchos', 'Zosterops_simplex', 'Passer_montanus', 'Spilopelia_chinensis', 'Acridotheres_javanicus', 'Syrmaticus_mikado']
+# species_list = ['Passer_cinnamomeus', 'Carpodacus_formosanus', 'Acridotheres_cristatellus', 'Nisaetus_nipalensis', 'Corvus_macrorhynchos', 'Pycnonotus_taivanus', 'Glaucidium_brodiei', 'Psilopogon_nuchalis', 'Treron_sieboldii', 'Lonchura_atricapilla', 'Prunella_collaris', 'Hirundapus_cochinchinensis', 'Alauda_gulgula', 'Pycnonotus_sinensis', 'Threskiornis_aethiopicus', 'Suthora_verreauxi', 'Garrulax_ruficeps', 'Centropus_bengalensis', 'Treron_formosae', 'Anas_platyrhynchos', 'Ptilinopus_leclancheri', 'Rhyacornis_fuliginosa', 'Acridotheres_tristis', 'Otus_lettia', 'Enicurus_scouleri', 'Spizixos_semitorques', 'Euodice_malabarica', 'Ketupa_flavipes', 'Garrulax_taewanus', 'Motacilla_alba', 'Sitta_europaea', 'Tarsiger_johnstoniae', 'Poecile_varius', 'Elanus_caeruleus', 'Alcippe_morrisonia', 'Oriolus_traillii', 'Ardea_purpurea', 'Phasianus_colchicus', 'Horornis_acanthizoides', 'Strix_nivicolum', 'Lophura_swinhoii', 'Delichon_dasypus', 'Lonchura_striata', 'Yuhina_brunneiceps', 'Gracupica_nigricollis', 'Myophonus_insularis', 'Periparus_ater', 'Zosterops_simplex', 'Syrmaticus_mikado', 'Prinia_flaviventris']
 
 
 
 # lists of species and dates for smooth visualization preview
-date_list_smoothviz = ['2020-01-01', '2020-04-01', '2020-07-01', '2020-10-01']
-species_list_smoothviz = ['Psilopogon_nuchalis', 'Yuhina_brunneiceps', 'Corvus_macrorhynchos']
+date_list_smoothviz = ['2018-01-01', '2018-04-01', '2018-07-01', '2018-10-01']
+species_list_smoothviz = ['Psilopogon_nuchalis', 'Yuhina_brunneiceps', 'Corvus_macrorhynchos', 'Syrmaticus_mikado']
 
 # packed the species lists and date lists for training
 info = SimpleNamespace(**dict(
