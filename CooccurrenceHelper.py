@@ -180,7 +180,7 @@ class CooccurrenceHelper():
                         primary_indices[data_unit_str] = True
 
                         pwd_spatial_satisfied = pairwise_distances(obsrvs1[['decimalLatitude', 'decimalLongitude']], obsrvs2[['decimalLatitude', 'decimalLongitude']]) < self.cooccurrence_xy_mul * self.cooccurrence_xy_limit
-                        pwd_temporal_satisfied = pairwise_distances(obsrvs1[['day']], obsrvs2[['day']]) < self.cooccurrence_day_mul * self.cooccurrence_day_limit
+                        pwd_temporal_satisfied = pairwise_distances(obsrvs1[['daysincebegin']], obsrvs2[['daysincebegin']]) < self.cooccurrence_day_mul * self.cooccurrence_day_limit
                         pwd_satisfied = pwd_spatial_satisfied & pwd_temporal_satisfied
                         satisfied_idx = np.where(pwd_satisfied)
                         cooccur_satisfied_vals = np.stack([
@@ -198,10 +198,9 @@ class CooccurrenceHelper():
                                 cooccur_counts_df = pd.concat([cooccur_counts_df, cooccur_local_unique_counts])
 
             if cooccur_counts_df is not None:
-                cooccur_counts_df = cooccur_counts_df.groupby(['sp1', 'sp2']).sum().reset_index()                    
+                cooccur_counts_df = cooccur_counts_df.groupby(['sp1', 'sp2']).sum().reset_index()
+                
         # save the cooccurrence csv
-        
-        
         sp_list = self.species_filter.species.unique()
         sp_list.sort()
         sp_combs_df = pd.DataFrame(np.array(np.meshgrid(sp_list, sp_list)).T.reshape(-1, 2), columns=['sp1', 'sp2'])
