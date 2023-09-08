@@ -35,11 +35,11 @@ class CooccurrenceHelper():
         self.date_start = datetime.strptime(temporal_conf.date_start, '%Y-%m-%d')
         self.date_end = datetime.strptime(temporal_conf.date_end, '%Y-%m-%d')
         
-        # 
+        # convert date to 'days after day_first' (int)
         self.day_first = 0
         self.day_last = (self.date_end - self.date_start).days
         
-        #
+        # set output directory and create folders
         self.output_dir = output_dir
 
         if not os.path.exists(self.output_dir):
@@ -120,11 +120,11 @@ class CooccurrenceHelper():
         self.cooccurrence_day_mul = cooccurrence_day_mul
         self.cooccurrence_xy_mul = cooccurrence_xy_mul
         
-        sp_filter['daysincebeginUnit'] = ((sp_filter.daysincebegin - sp_filter.daysincebegin.min()) // (self.cooccurrence_day_limit * self.cooccurrence_day_mul)).astype(int)        
+        sp_filter['daysincebeginUnit'] = ((sp_filter.daysincebegin - sp_filter.daysincebegin.min()) // (self.cooccurrence_day_limit * self.cooccurrence_day_mul)).astype(int)
         sp_filter['decimalLongitudeUnit'] = res_divider(sp_filter.decimalLongitude - self.x_start, self.spatial_conf.out_res * self.cooccurrence_xy_mul).astype(int)
         sp_filter['decimalLatitudeUnit'] = res_divider(sp_filter.decimalLatitude - self.y_start, self.spatial_conf.out_res * self.cooccurrence_xy_mul).astype(int)
 
-        def coocurr_agg (df, data_unit):
+        def coocurr_agg(df, data_unit):
             t, x, y = df.name
             if t not in data_unit:
                 data_unit[t] = dict()
@@ -150,7 +150,7 @@ class CooccurrenceHelper():
                     len_y = max(data_unit[t][x])
                     print(f'Counting... {t}/{len_t}, {x}/{len_x}, {y}/{len_y}', end='\r')
 
-                    obsrvs1 = data_unit[t][x][y]            
+                    obsrvs1 = data_unit[t][x][y]
 
                     neighbor_units = np.array(np.meshgrid([0, 1], [0, 1], [0, 1]), dtype=int).T.reshape(-1, 3)
 
