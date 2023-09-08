@@ -425,7 +425,7 @@ class LitUNetSDM(pl.LightningModule):
                 bg_one_train_ = result[(bg == 1) & (partition == 1)]
                 train_pred = torch.cat((bg_one_train_, label_one_trian_))
                 train_true = torch.cat([torch.zeros_like(bg_one_train_, device=self.device), torch.ones_like(label_one_trian_, device=self.device)])
-                roc_score_train = binary_auroc(train_pred, train_true)
+                roc_score_train = binary_auroc(train_pred, train_true.to(torch.int))
                 roc_epoch_train.append(roc_score_train)
 #             except ValueError:
 #                 roc_score_train = -9
@@ -437,7 +437,7 @@ class LitUNetSDM(pl.LightningModule):
                 bg_one_val_ = result[(bg == 1) & (partition == 0)]
                 val_pred = torch.cat((bg_one_val_, label_one_val_)) #.detach().cpu().numpy()
                 val_true = torch.cat([torch.zeros_like(bg_one_val_, device=self.device), torch.ones_like(label_one_val_, device=self.device)])
-                roc_score_val = binary_auroc(val_pred, val_true)
+                roc_score_val = binary_auroc(val_pred, val_true.to(torch.int))
                 roc_epoch_val.append(roc_score_val)
 #             except ValueError:
 #                 roc_score_val = -9
