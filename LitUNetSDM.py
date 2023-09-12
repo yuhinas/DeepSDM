@@ -78,7 +78,7 @@ class LitUNetSDM(pl.LightningModule):
         #l2    
         l2_matrix = (k_matrix * l).where(((labels == 0) & (k_matrix > 0)), zero_tensor) #torch.zeros(l.shape, device=l.device))
         l2_loss = l2_matrix.sum(axis = (1, 2, 3))
-        l2_count = ((labels == 0) & (k_matrix > 0) & (k_matrix <= 1)).sum(axis = (1, 2, 3))
+        l2_count = ((labels == 0) & (k_matrix > 0)).sum(axis = (1, 2, 3))
         l2_loss = (l2_loss / l2_count).nan_to_num()
 
 
@@ -163,7 +163,7 @@ class LitUNetSDM(pl.LightningModule):
             species = label_stack_val['species'][idx_species_date]
             date = label_stack_val['date'][idx_species_date]
 
-            # Find the row idx of occurrences for specific speceis and date
+            # Find the row idx of occurrences for specific species and date
             idx_epoch = [i for i in range(len(species_epoch)) if (species_epoch[i] == species) & (date_epoch[i] == date)]
 
             # The predicted p according to the found rows
@@ -185,8 +185,8 @@ class LitUNetSDM(pl.LightningModule):
             nop_epoch = true_epoch_eq1.sum() #sum(true_epoch == 1)
             # where no occurrence but WHAT IS THIS k2_use_val <= 1? Surveyed but no occurrence?
             
-            # for thoese k2_use_epoch out of extent are set to 9
-            pred_epoch_a_all = pred_epoch[torch.where((~true_epoch_eq1) & (k2_use_epoch <= 1))[0]]
+            # for thoese k2_use_epoch out of extent are set to -9999
+            pred_epoch_a_all = pred_epoch[torch.where((~true_epoch_eq1) & (k2_use_epoch >= 0))[0]]
 
 
             # draw random points from surveyed but no occurrence
