@@ -99,7 +99,7 @@ class TaxaDataset(Dataset):
         self.k2_stack = F.pad(torch.cat(k2_stack_new),
                               (0, (self.width_new - self.width_original), 0, (self.height_new - self.height_original)), 
                               mode = 'constant',
-                              value = 999)
+                              value = -9999)
         k2_stack_new.clear()
         self.k2_stack = self.k2_stack.cpu()
         torch.cuda.empty_cache()
