@@ -67,25 +67,25 @@ class LitUNetSDM(pl.LightningModule):
         
         #l = self.bce_loss(image_output, labels)
         l = F.binary_cross_entropy_with_logits(image_output, labels, reduction='none')
-        l = l.where(k_matrix <= 1, zero_tensor) #torch.zeros(l.shape, device=l.device))
+        l = l.where(k2 >= 0, zero_tensor) #torch.zeros(l.shape, device=l.device))
         
         #l1
         l1_matrix = l.where(labels == 1, zero_tensor) #torch.zeros(l.shape, device=l.device))
         l1_loss = l1_matrix.sum(axis = (1, 2, 3))
         l1_count = (labels == 1).sum(axis = (1, 2, 3))
         l1_loss = (l1_loss / l1_count).nan_to_num()
-
+                
         #l2    
-        l2_matrix = (k_matrix * l).where(((labels == 0) & (k_matrix > 0)), zero_tensor) #torch.zeros(l.shape, device=l.device))
+        l2_matrix = (k_matrix * l).where(((labels == 0) & (k2 > 0)), zero_tensor) #torch.zeros(l.shape, device=l.device))
         l2_loss = l2_matrix.sum(axis = (1, 2, 3))
-        l2_count = ((labels == 0) & (k_matrix > 0)).sum(axis = (1, 2, 3))
+        l2_count = ((labels == 0) & (k2 > 0)).sum(axis = (1, 2, 3))
         l2_loss = (l2_loss / l2_count).nan_to_num()
 
 
         #l3    
-        l3_matrix = l.where(k_matrix == 0, zero_tensor) #torch.zeros(l.shape, device=l.device))
+        l3_matrix = l.where(k2 == 0, zero_tensor) #torch.zeros(l.shape, device=l.device))
         l3_loss = l3_matrix.sum(axis = (1, 2, 3))
-        l3_count = (k_matrix == 0).sum(axis = (1, 2, 3))
+        l3_count = (k2 == 0).sum(axis = (1, 2, 3))
         l3_loss = (l3_loss / l3_count).nan_to_num() 
 
         k1_loss = l1_loss.sum() / len(image_output)
@@ -459,7 +459,7 @@ class LitUNetSDM(pl.LightningModule):
             except:
                 ax = axes
             # if self.trainer.global_rank == 0:
-            ax.imshow(result_masked_npy, cmap = 'coolwarm')
+            ax.imshow(result_masked_npy, cmap = 'coolwarm', vmin = 0, vmax = 1)
 
             # black points: presence points in training area
             # green points: presence points in validation area
@@ -567,7 +567,7 @@ class LitUNetSDM(pl.LightningModule):
             result_masked_npy = result_masked.cpu().numpy()
 
             # if self.trainer.global_rank == 0:
-            plt.imshow(result_masked_npy, cmap = 'coolwarm')
+            plt.imshow(result_masked_npy, cmap = 'coolwarm', vmin = 0, vmax = 1)
 
             # black points: presence points in training area
             # green points: presence points in validation area
