@@ -23,9 +23,19 @@ class TaxaDataset(Dataset):
         
         self.height_original = label_stack['tensor'].shape[1]
         self.width_original = label_stack['tensor'].shape[2]
-        self.height_new = self.height_original + (self.split.shape[0] - self.height_original % self.split.shape[0])
-        self.width_new = self.width_original + (self.split.shape[1] - self.width_original % self.split.shape[1])
         
+        # if 'height_original' is divisible by the height number of split(aka split.shape[0])
+        # 'height_new' = 'height_original'
+        # otherwise 'height_new' will be 'height_original' adding a smallest number to be the closest number that divisible by height number of split
+        if self.height_original % self.split.shape[0] == 0:
+            self.height_new = self.height_original
+        else:
+            self.height_new = self.height_original + (self.split.shape[0] - self.height_original % self.split.shape[0])
+        # same situation of 'width_new' and 'width_original'
+        if self.width_original % self.split.shape[1] == 0:
+            self.width_new = self.width_original
+        else:
+            self.width_new = self.width_original + (self.split.shape[1] - self.width_original % self.split.shape[1])
         
         # train, val 根據split切分後的大小
         self.split_height = self.height_new // self.split.shape[0]
@@ -49,67 +59,42 @@ class TaxaDataset(Dataset):
         self.split_tif = split_tif
         self.split_element = split_element
         
-        # 調整env_stack, label_stack, k
+        # adjust shape of env_stack, label_stack and k2 to (height_new, width_new)
         # env_stack
-        env_stack_new = []
-        for i in range(env_stack['tensor'].shape[0]):
-            tensor = []
-            for j in range(env_stack['tensor'].shape[1]):
-                tensor_select = env_stack['tensor'][i, j, :, :] #.detach()
-                # WHY PAD (0, W, 0, H) instead of (W/2, W/2, H/2, H/2) ??????
-                tensor.append(tensor_select[None, ])
-#                 tensor.append(F.pad(tensor_select[None, ], 
-#                                     (0, (self.width_new - self.width_original), 0, (self.height_new - self.height_original)), 
-#                                     mode = 'replicate'))
-            env_stack_new.append(torch.cat(tensor).to(f'cuda:{self.cuda_id}'))
+        env_stack_new = env_stack['tensor'].detach().to(f'cuda:{self.cuda_id}')
         torch.cuda.synchronize()
-        self.env_stack = F.pad(torch.stack(env_stack_new),
-                               (0, (self.width_new - self.width_original), 0, (self.height_new - self.height_original)),
-                               mode = 'replicate')
-        env_stack_new.clear()
+        self.env_stack = F.pad(env_stack_new,
+                              (0, (self.width_new - self.width_original), 0, (self.height_new - self.height_original)),
+                              mode = 'replicate')
         self.env_stack = self.env_stack.cpu()
         torch.cuda.empty_cache()
         
-#         print(self.env_stack.shape)
         #label_stack
-        label_stack_new = []
-        for i in range(label_stack['tensor'].shape[0]):
-            label_stack_new.append(label_stack['tensor'][i:(i+1), :, :].cuda(self.cuda_id))
-#             label_stack_new.append(F.pad(label_stack['tensor'][i:(i+1), :, :], 
-#                                          (0, (self.width_new - self.width_original), 0, (self.height_new - self.height_original)), 
-#                                          mode = 'constant', 
-#                                          value = 0))
-        self.label_stack = F.pad(torch.cat(label_stack_new),
+        label_stack_new = label_stack['tensor'].detach().cuda(self.cuda_id)
+        self.label_stack = F.pad(label_stack_new,
                                  (0, (self.width_new - self.width_original), 0, (self.height_new - self.height_original)), 
                                  mode = 'constant', 
                                  value = 0)
-        label_stack_new.clear()
         self.label_stack = self.label_stack.cpu()
         torch.cuda.empty_cache()
         
-
         #k2
-        k2_stack_new = []
-        for i in range(k2_stack['tensor'].shape[0]):
-            k2_stack_new.append(k2_stack['tensor'][i:(i+1), :, :].cuda(self.cuda_id))
-#             k2_stack_new.append(F.pad(k2_stack['tensor'][i:(i+1), :, :], 
-#                                (0, (self.width_new - self.width_original), 0, (self.height_new - self.height_original)), 
-#                                mode = 'constant', 
-#                                value = 999))
-        self.k2_stack = F.pad(torch.cat(k2_stack_new),
+        k2_stack_new = k2_stack['tensor'].detach().cuda(self.cuda_id)
+        self.k2_stack = F.pad(k2_stack_new,
                               (0, (self.width_new - self.width_original), 0, (self.height_new - self.height_original)), 
                               mode = 'constant',
                               value = -9999)
-        k2_stack_new.clear()
         self.k2_stack = self.k2_stack.cpu()
         torch.cuda.empty_cache()
 
-        self.k2_stack_date = k2_stack['date_list']
+        self.k2_stack_date = k2_stack['date']
         
 #         torch.cuda.synchronize()
 #         print(time.time() - starttime)
 #         print('########## STACKS ##########')
 
+        # transform
+        # flip and rotation
         self.random_transform = transforms.Compose([
             transforms.RandomHorizontalFlip(),
             transforms.RandomVerticalFlip(),
@@ -119,6 +104,9 @@ class TaxaDataset(Dataset):
                 ]),
                 p=0.5
             )
+        ])
+        self.random_transform = transfomrs.Compose([
+            transforms.RandomCrop(size = (1,1))
         ])
 
         
@@ -137,7 +125,7 @@ class TaxaDataset(Dataset):
         k2 = self.k2_stack[idx_date:(idx_date+1), height_start:height_end, width_start:width_end]#.cuda(self.cuda_id)
         
         # inputs
-        inputs = self.env_stack[idx_date, :, height_start : height_end, width_start : width_end]#.cuda(self.cuda_id)
+        inputs = self.env_stack[idx_date, :, height_start:height_end, width_start:width_end]#.cuda(self.cuda_id)
         
         # labels
         labels = self.label_stack[idx_species_date:(idx_species_date+1), height_start:height_end, width_start:width_end]#.cuda(self.cuda_id)
@@ -152,10 +140,11 @@ class TaxaDataset(Dataset):
         inputs = torch.unsqueeze(inputs, axis=0)
         labels = torch.unsqueeze(labels, axis=0)
 
-        stacked_all = torch.cat([inputs, labels, k2], axis = 1)
-        stacked_all = self.random_transform(stacked_all)
-        labels = stacked_all[:, inputs.shape[1]:(inputs.shape[1] + labels.shape[1])]
-        k2 = stacked_all[:, (inputs.shape[1] + labels.shape[1]):(inputs.shape[1] + labels.shape[1] + k2.shape[1])]
+#         stacked_all = torch.cat([inputs, labels, k2], axis = 1)
+#         stacked_all = self.random_transform(stacked_all)
+#         inputs = stacked_all[:, 0:inputs.shape[1]]
+#         labels = stacked_all[:, inputs.shape[1]:(inputs.shape[1] + labels.shape[1])]
+#         k2 = stacked_all[:, (inputs.shape[1] + labels.shape[1]):(inputs.shape[1] + labels.shape[1] + k2.shape[1])]
 
         #每個training set隨機選config.num_train_subsample_stacks個小subsample出來訓練
         rand_height = torch.randint(0, (self.split_height - self.conf.subsample_height + 1), (random_stack_num, ))
