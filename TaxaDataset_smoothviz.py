@@ -12,7 +12,7 @@ class TaxaDataset_smoothviz(Dataset):
 
         self.embedding = torch.tensor(embedding[self.species]).reshape(-1, 1, 1)#.cuda()
         
-        idx_date = env_stack['date_list'].index(self.date)
+        idx_date = env_stack['date'].index(self.date)
         env = env_stack['tensor'][idx_date, ]#.cuda()
 
         

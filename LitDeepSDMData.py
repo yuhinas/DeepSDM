@@ -80,8 +80,8 @@ class LitDeepSDMData(pl.LightningDataModule):
         # env
         ### The order is date x env
         env_stack = {
-            'date_list' : stage_date_list,
-            'env_list' : stage_env_list,
+            'date' : stage_date_list,
+            'env' : stage_env_list,
         }
         env_tensor_list = []
         for date_ in stage_date_list:
@@ -99,8 +99,8 @@ class LitDeepSDMData(pl.LightningDataModule):
                     img_norm = img
                 date_env_list.append(img_norm)
             env_tensor_list.append(torch.cat(date_env_list)[None, ])
-        env_stack['tensor'] = torch.cat(env_tensor_list)
-        
+        env_stack['tensor'] = torch.cat(env_tensor_list)  # env_stack['tensor'].shape = (len(stage_date_list), len(env_list), height, width)
+
         return env_stack
     
     def _load_label_list(self, stage_date_list, stage_env_list, stage_species_list):
@@ -129,7 +129,7 @@ class LitDeepSDMData(pl.LightningDataModule):
     def _load_k2_list(self, stage_date_list, stage_env_list, stage_species_list):        
         # k2 value
         k2_stack = {
-            'date_list' : stage_date_list,
+            'date' : stage_date_list,
         }
         k2_tensor_list = []
         for date_ in stage_date_list:
@@ -323,8 +323,8 @@ class LitDeepSDMData(pl.LightningDataModule):
 
     def predict_dataloader(
         self,
-        date_list = ['2020_01_01', '2020_04_01', '2020_07_01', '2020_10_01'],
-        species_list = ['Psilopogon_nuchalis', 'Yuhina_brunneiceps', 'Corvus_macrorhynchos']
+        date_list,
+        species_list
     ):
         
         env_list = self.info.env_list
