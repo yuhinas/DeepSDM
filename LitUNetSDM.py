@@ -66,7 +66,7 @@ class LitUNetSDM(pl.LightningModule):
         k_matrix = torch.pow(k2, self.conf.p)
         
         #l = self.bce_loss(image_output, labels)
-        l = F.binary_cross_entropy_with_logits(image_output, labels, reduction='none')
+        l = F.binary_cross_entropy_with_logits(image_output, labels.to(torch.float), reduction='none')
         l = l.where(k2 >= 0, zero_tensor) #torch.zeros(l.shape, device=l.device))
         
         #l1
@@ -568,6 +568,7 @@ class LitUNetSDM(pl.LightningModule):
 
             # if self.trainer.global_rank == 0:
             plt.imshow(result_masked_npy, cmap = 'coolwarm', vmin = 0, vmax = 1)
+            plt.colorbar()
 
             # black points: presence points in training area
             # green points: presence points in validation area
