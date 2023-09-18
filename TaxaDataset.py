@@ -18,8 +18,10 @@ class TaxaDataset(Dataset):
 
         if trainorval == 'train':
             self.trainorval = 1
+            self.random_stack_num = self.conf.num_train_subsample_stacks
         else:
             self.trainorval = 0
+            self.random_stack_num = self.conf.num_val_subsample_stacks
         
         self.height_original = label_stack['tensor'].shape[1]
         self.width_original = label_stack['tensor'].shape[2]
@@ -95,18 +97,18 @@ class TaxaDataset(Dataset):
 
         # transform
         # flip and rotation
+#         self.random_transform = transforms.Compose([
+#             transforms.RandomHorizontalFlip(),
+#             transforms.RandomVerticalFlip(),
+#             transforms.RandomApply(
+#                 torch.nn.ModuleList([
+#                     transforms.RandomRotation((90, 90)),
+#                 ]),
+#                 p=0.5
+#             )
+#         ])
         self.random_transform = transforms.Compose([
-            transforms.RandomHorizontalFlip(),
-            transforms.RandomVerticalFlip(),
-            transforms.RandomApply(
-                torch.nn.ModuleList([
-                    transforms.RandomRotation((90, 90)),
-                ]),
-                p=0.5
-            )
-        ])
-        self.random_transform = transfomrs.Compose([
-            transforms.RandomCrop(size = (1,1))
+            transforms.RandomCrop(size = (self.conf.subsample_height, self.conf.subsample_width))
         ])
 
         
@@ -129,55 +131,27 @@ class TaxaDataset(Dataset):
         
         # labels
         labels = self.label_stack[idx_species_date:(idx_species_date+1), height_start:height_end, width_start:width_end]#.cuda(self.cuda_id)
-
-        if self.trainorval == 1:
-            random_stack_num = self.conf.num_train_subsample_stacks
-        else:
-            random_stack_num = self.conf.num_val_subsample_stacks
             
         embeddings = torch.unsqueeze(embeddings, axis=0)
         k2 = torch.unsqueeze(k2, axis=0)
         inputs = torch.unsqueeze(inputs, axis=0)
         labels = torch.unsqueeze(labels, axis=0)
 
-#         stacked_all = torch.cat([inputs, labels, k2], axis = 1)
-#         stacked_all = self.random_transform(stacked_all)
-#         inputs = stacked_all[:, 0:inputs.shape[1]]
-#         labels = stacked_all[:, inputs.shape[1]:(inputs.shape[1] + labels.shape[1])]
-#         k2 = stacked_all[:, (inputs.shape[1] + labels.shape[1]):(inputs.shape[1] + labels.shape[1] + k2.shape[1])]
+        stacked_all = torch.cat([inputs, labels, k2], axis = 1)
+        stacked_all = self.random_transform(stacked_all)
+        inputs_transform = stacked_all[:, 0:inputs.shape[1]]
+        labels_transform = stacked_all[:, inputs.shape[1]:(inputs.shape[1] + labels.shape[1])]
+        k2_transform = stacked_all[:, (inputs.shape[1] + labels.shape[1]):(inputs.shape[1] + labels.shape[1] + k2.shape[1])]
 
-        #每個training set隨機選config.num_train_subsample_stacks個小subsample出來訓練
-        rand_height = torch.randint(0, (self.split_height - self.conf.subsample_height + 1), (random_stack_num, ))
-        rand_width = torch.randint(0, (self.split_width - self.conf.subsample_width + 1), (random_stack_num, ))
-
-        inputs_random_stack = []
-        labels_random_stack = []
-        k2_random_stack = []
-        embeddings_random_stack = []
-
-        for i_stack in range(random_stack_num):
-            height_start, height_end = rand_height[i_stack], rand_height[i_stack] + self.conf.subsample_height
-            width_start, width_end = rand_width[i_stack], rand_width[i_stack] + self.conf.subsample_width
-
-            inputs_random_stack.append(inputs[:, :, height_start:height_end, width_start:width_end])
-            labels_random_stack.append(labels[:, :, height_start:height_end, width_start:width_end])
-            embeddings_random_stack.append(embeddings)
-            k2_random_stack.append(k2[:, :, height_start:height_end, width_start:width_end])
-
-        inputs_model = torch.cat(inputs_random_stack)
-        labels_model = torch.cat(labels_random_stack)
-        k2_model = torch.cat(k2_random_stack)
-        embeddings_model = torch.cat(embeddings_random_stack)
-#         print(inputs_model.shape, embeddings_model.shape, labels_model.shape, k2_model.shape, species, date)
-        return [inputs_model, embeddings_model], labels_model, k2_model, species, date
+        return [inputs_transform, embeddings], labels_transform, k2_transform, species, date
 
     def __len__(self):
-        return len(self.species_date_list) * sum(self.split.view(-1) == self.trainorval)
+        return len(self.species_date_list) * sum(self.split.view(-1) == self.trainorval) * self.random_stack_num
     
     
     def _getidx(self, index):
-        idx_species_date = index % len(self.species_date_list)
-        idx_split = index // len(self.species_date_list)
+        idx_species_date = index // self.random_stack_num % len(self.species_date_list)
+        idx_split = index // self.random_stack_num // len(self.species_date_list)
 
         return idx_species_date, idx_split
     

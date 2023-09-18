@@ -377,7 +377,7 @@ class LitUNetSDM(pl.LightningModule):
         print("\n")
         for dataloader_idx, dataloader_smoothviz in enumerate(dataloaders_smoothviz):
 
-#             dataloader_smoothviz = DataLoader(dataset_smoothviz, batch_size=self.conf.base_batch_size * self.conf.num_train_subsample_stacks, shuffle=False, num_workers=16, pin_memory=True)
+#             dataloader_smoothviz = DataLoader(dataset_smoothviz, batch_size=self.conf.batch_size * self.conf.num_train_subsample_stacks, shuffle=False, num_workers=16, pin_memory=True)
 
             height_new = dataloader_smoothviz.dataset.height_new
             width_new = dataloader_smoothviz.dataset.width_new
@@ -574,8 +574,8 @@ class LitUNetSDM(pl.LightningModule):
             # green points: presence points in validation area
             plt.plot(np.where(label == 1)[1], np.where(label == 1)[0], '.', color = 'black')
 
-            date_ = '-'.join(species_date[0].split('_')[-3:])
-            sp_ = '_'.join(species_date[0].split('_')[:-3])
+            date_ = species_date[0].split('_')[-1:][0]
+            sp_ = '_'.join(species_date[0].split('_')[:-1])
             plt.title(f'{sp_}: {date_}')
             plt.savefig(f'{dir_png_out}/{sp_}_{date_}_predict.png')
             plt.close()

@@ -20,7 +20,6 @@ class LitDeepSDMData(pl.LightningDataModule):
         self.info = info
         self.conf = conf
         self.dir_result = dir_result
-        self.batch_size = self.conf.base_batch_size * self.conf.num_train_subsample_stacks
 
         if not os.path.isdir(f'./tmp'):
             os.makedirs(f'./tmp')
@@ -310,16 +309,16 @@ class LitDeepSDMData(pl.LightningDataModule):
         self.trainer.strategy.barrier()
         
     def train_dataloader(self):
-        return DataLoader(self.dataset_train, self.batch_size, shuffle=True, num_workers=16, pin_memory=True)
+        return DataLoader(self.dataset_train, self.conf.batch_size, shuffle=True, num_workers=16, pin_memory=True)
 
     def val_dataloader(self):
         return [
-            DataLoader(self.dataset_train_on_val, self.batch_size, shuffle=False, num_workers=16, pin_memory=True), # eval train dataset first
-            DataLoader(self.dataset_val, self.batch_size, shuffle=False, num_workers=16, pin_memory=True), # Why shuffling here?
+            DataLoader(self.dataset_train_on_val, self.conf.batch_size, shuffle=False, num_workers=16, pin_memory=True), # eval train dataset first
+            DataLoader(self.dataset_val, self.conf.batch_size, shuffle=False, num_workers=16, pin_memory=True), # Why shuffling here?
         ]
 
     def smoothviz_dataloader(self):
-        return [DataLoader(dataset_smoothviz, batch_size=self.batch_size, shuffle=False, num_workers=0) for dataset_smoothviz in self.datasets_smoothviz]
+        return [DataLoader(dataset_smoothviz, batch_size=self.conf.batch_size, shuffle=False, num_workers=0) for dataset_smoothviz in self.datasets_smoothviz]
 
     def predict_dataloader(
         self,
@@ -353,5 +352,5 @@ class LitDeepSDMData(pl.LightningDataModule):
                 )
             )
         
-        return [DataLoader(dataset_predict, batch_size=self.batch_size, shuffle=False, num_workers=0) for dataset_predict in self.datasets_predict]
+        return [DataLoader(dataset_predict, batch_size=self.conf.batch_size, shuffle=False, num_workers=0) for dataset_predict in self.datasets_predict]
     

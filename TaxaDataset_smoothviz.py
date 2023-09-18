@@ -5,7 +5,7 @@ from torch.utils.data import Dataset
 class TaxaDataset_smoothviz(Dataset):
     def __init__(self, idx_species_date, env_stack, embedding, label_stack, subsample_height, subsample_width, num_smoothviz_steps):
         
-        self.species_date = label_stack['species_date'][idx_species_date] #'Acridotheres_cristatellus_2000_1'之類的
+        self.species_date = label_stack['species_date'][idx_species_date] #'Acridotheres_cristatellus_2000-01-01'之類的
         self.species = label_stack['species'][idx_species_date]
         self.date = label_stack['date'][idx_species_date]
         self.label = label_stack['tensor'][idx_species_date, ]#.cuda()
