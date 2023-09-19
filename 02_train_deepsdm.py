@@ -49,7 +49,7 @@ timelog = time.strftime('%Y%m%d%H%M%S', time.localtime())
 # initialize the lightning data module
 deep_sdm_data = LitDeepSDMData(info=info, conf=conf)
 
-### MODLE
+### MODEL
 # initialize the DeepSDM lightning module
 model = LitUNetSDM(info=info, conf=conf)
 
@@ -76,6 +76,8 @@ early_stop_callback = EarlyStopping(
 # change the devices number if you have only 1 GPU or more GPUs
 # We use half precision for less memory usage and faster calculations
 trainer_conf = SimpleNamespace(**DeepSDM_conf.trainer_conf)
+logger = pl.loggers.TensorBoardLogger(save_dir = './', version = timelog)
+logger.log_hyperparams(vars(DeepSDM_conf))
 trainer = pl.Trainer(
     max_epochs = conf.epochs, 
     devices = trainer_conf.devices, 
@@ -83,7 +85,8 @@ trainer = pl.Trainer(
     check_val_every_n_epoch = trainer_conf.check_val_every_n_epoch,
     strategy = DDPStrategy(static_graph=True), # use 'ddp_fork_find_unused_parameters_true' instead on jupyter or colab
     precision = trainer_conf.precision, 
-    callbacks = [checkpoint_callback, early_stop_callback]
+    callbacks = [checkpoint_callback, early_stop_callback], 
+    logger = logger
 )
 
 # Start the training!

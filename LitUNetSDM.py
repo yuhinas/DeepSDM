@@ -63,7 +63,7 @@ class LitUNetSDM(pl.LightningModule):
         
         zero_tensor = torch.tensor(0, device=self.device)
         
-        k_matrix = torch.pow(k2, self.conf.p)
+        k_matrix = torch.pow(k2, self.conf.k2_p)
         
         #l = self.bce_loss(image_output, labels)
         l = F.binary_cross_entropy_with_logits(image_output, labels.to(torch.float), reduction='none')
@@ -89,7 +89,7 @@ class LitUNetSDM(pl.LightningModule):
         l3_loss = (l3_loss / l3_count).nan_to_num() 
 
         k1_loss = l1_loss.sum() / len(image_output)
-        k2_loss = self.conf.k2 * l2_loss.sum() / len(image_output)
+        k2_loss = l2_loss.sum() / len(image_output)
         k3_loss = self.conf.k3 * l3_loss.sum() / len(image_output)
         total_loss = k1_loss + k2_loss + k3_loss
 
@@ -316,12 +316,6 @@ class LitUNetSDM(pl.LightningModule):
             self.log('best_threshold_avg', best_threshold_avg, on_epoch=True, on_step=False, sync_dist=True)
 
         torch.cuda.empty_cache()
-        
-#         wandb.log({"f1 score (train avg)": f1_train_avg, 
-#                    "f1 score (val avg)": f1_val_avg, 
-#                    "f1 score (train weighted avg)": f1_train_weighted_avg, 
-#                    "f1 score (val weighted avg)": f1_val_weighted_avg}, 
-#                   step = self.current_epoch)
 
         
     def validation_step(self, batch, batch_idx, dataloader_idx):
@@ -490,8 +484,8 @@ class LitUNetSDM(pl.LightningModule):
         plt.close()
         
         if self.trainer.state.stage != 'sanity_check':
-            self.log('auc_train', auc_train, on_epoch=True, on_step=False, rank_zero_only=True)
-            self.log('auc_val', auc_val, on_epoch=True, on_step=False, rank_zero_only=True)
+            self.log('auc_train', auc_train, on_epoch=True, on_step=False, rank_zero_only=True, sync_dist=False)
+            self.log('auc_val', auc_val, on_epoch=True, on_step=False, rank_zero_only=True, sync_dist=False)
 
             
     def predict(self, dataloaders_predict=[], datamodule=None, output_dir='./predicts', ref_geotiff = './workspace/extent_binary.tif'):
@@ -572,12 +566,12 @@ class LitUNetSDM(pl.LightningModule):
 
             # black points: presence points in training area
             # green points: presence points in validation area
-            plt.plot(np.where(label == 1)[1], np.where(label == 1)[0], '.', color = 'black')
+            plt.plot(np.where(label == 1)[1], np.where(label == 1)[0], '.', color = 'black', markersize = 1)
 
             date_ = species_date[0].split('_')[-1:][0]
             sp_ = '_'.join(species_date[0].split('_')[:-1])
             plt.title(f'{sp_}: {date_}')
-            plt.savefig(f'{dir_png_out}/{sp_}_{date_}_predict.png')
+            plt.savefig(f'{dir_png_out}/{sp_}_{date_}_predict.png', dpi = 200)
             plt.close()
             
             with rasterio.open(
