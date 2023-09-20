@@ -19,20 +19,28 @@ r_start <- as.numeric(args[1])
 # r_start <- 1
 r_end <- r_start + 299
 
+# specify timelog
+timelog <- 'version_20'
+
+# load DeepSDM model configurations
 DeepSDM_conf <- yaml.load_file('DeepSDM_conf.yaml')
-
-extent_binary <- raster('workspace/extent_binary.tif')
-extent_binary[extent_binary == 0] <- NA
-trainval_split <- raster('tmp/DeepSDM DEMO/20230911141642-0_partition_extent.tif')
-trainval_split[is.na(values(trainval_split))] = 0
-
-env_info <- fromJSON(file = 'workspace/env_information.json')
 env_list <- sort(DeepSDM_conf$env_list)
 
+# extent_binary -> 1:prediction area (land); 0:non-prediction area (sea)
+# trainval_split -> 1:training split; NA: validation split
+extent_binary <- raster('workspace/extent_binary.tif')
+trainval_split <- raster('tmp/DeepSDM DEMO/20230911141642-0_partition_extent.tif')
+i_extent <- which(values(extent_binary) == 1) # cell index of prediction area
+i_trainsplit <- which(values(trainval_split) == 1) # cell index of training split
+i_valsplit <- which(is.na(values(trainval_split))) # cell index of validation split
+
+# load environmental information 
+env_info <- fromJSON(file = 'workspace/env_information.json')
+
+# load filtered csv from 01_prepare_data.ipynb
 sp_occ_filter <- read.csv('workspace/species_data/occurrence_data/species_occurrence_filter.csv')
-# points_season <- read.csv('..//raster_points_season.csv')
-# points_months <- read.csv('..//raster_points_months.csv')
-# species_index <- read.csv('..//species_index.csv')
+
+# make date_list for prediction
 date_list_predict <- c()
 i <- 1
 for (y_ in c(2018)){
@@ -41,9 +49,12 @@ for (y_ in c(2018)){
     i <- i + 1
   }
 }
+
 # season: specific months in one year
 # seasonavg: every speciefic months in the whole time span
 # all: the whole time span
+# AAA_BBB_CCC_DDD -> In DDD split, auc_roc score of using BBB env data for training and CCC env data for prediction with model AAA
+# eg. 'maxent_season_season_val' means In validation split, auc_roc score of using 'season' env data for training and predicting with 'season' data with maxent model
 df <- data.frame(spyrmon = character(),
                  maxent_season_season_val = numeric(), maxent_season_seasonavg_val = numeric(), maxent_season_all_val = numeric(),
                  maxent_seasonavg_season_val = numeric(), maxent_seasonavg_seasonavg_val = numeric(), maxent_seasonavg_all_val = numeric(),
@@ -58,34 +69,28 @@ df <- data.frame(spyrmon = character(),
                  p_all = numeric(), p_valpart_all = numeric(), p_trainpart_all = numeric(), pa_valpart_all = numeric(), pa_trainpart_all = numeric())
 
 
-files <- list.files('predicts/tif/')
+files <- list.files(sprintf('predicts/%s/tif', timelog))
 files <- sort(files)
 
+# function of maxent
 predict_maxent <- function(env, xm){
   result <- try(predict(env, xm, progress = ''), silent = T)
   return(result)
 }
 
-plot_result <- function(spyrmon, species, xm, extent_binary, pall, pseasonavg, pseason, log_info){
-  if (!dir.exists(sprintf('predicts_maxent/png/%s', species))){
-    dir.create(sprintf('predicts_maxent/png/%s', species), recursive = T)
-  }
-  if (!dir.exists(sprintf('predicts_maxent/tif/%s', species))){
-    dir.create(sprintf('predicts_maxent/tif/%s', species), recursive = T)
-  }
-  png(file.path('predicts_maxent',
-                'png',
-                species,
-                sprintf('%s_%s.png', spyrmon, log_info)),
+# function of plotting maxent results
+plot_result <- function(spyrmon, species, xm, extent_binary, pall, pseasonavg, pseason, log_info, dir_timelog_png, dir_timelog_tif, timelog){
+  png(file.path(dir_timelog_png, 
+                sprintf('%s_%s_%s.png', spyrmon, log_info, timelog)),
       width = 2000,
       height = 2000)
   
   plot(xm * extent_binary,
-       main = sprintf('%s_%s', spyrmon, log_info),
+       main = sprintf('%s_%s_%s', spyrmon, log_info, timelog),
        axes = FALSE,
        box = FALSE,
        legend = FALSE,
-       cex.main = 5,
+       cex.main = 4,
        col = color,
        breaks = seq(0, 1, 0.125))
   
@@ -94,27 +99,24 @@ plot_result <- function(spyrmon, species, xm, extent_binary, pall, pseasonavg, p
   points(pseason, pch = 16, col = 'red', cex = 1.5)
   dev.off()
   writeRaster(xm * extent_binary, 
-              file.path('predicts_maxent', 
-                        'tif', 
-                        species, 
-                        sprintf('%s_%s.tif', spyrmon, log_info)), 
+              file.path(dir_timelog_tif, 
+                        sprintf('%s_%s_%s.tif', spyrmon, log_info, timelog)), 
               overwrite = T)
 }
 
-plot_result_deepsdm <- function(spyrmon, species, xm, extent_binary, pall, pseasonavg, pseason, log_info){
-  png(file.path('predicts_maxent',
-                'png', 
-                species,
-                sprintf('%s_%s.png', spyrmon, log_info)),
+# function of plotting deepsdm result
+plot_result_deepsdm <- function(spyrmon, species, xm, extent_binary, pall, pseasonavg, pseason, log_info, dir_timelog_png, timelog){
+  png(file.path(dir_timelog_png, 
+                sprintf('%s_%s_%s.png', spyrmon, log_info, timelog)),
       width = 2000,
       height = 2000)
   
   plot(xm * extent_binary,
-       main = sprintf('%s_%s', spyrmon, log_info),
+       main = sprintf('%s_%s_%s', spyrmon, log_info, timelog),
        axes = FALSE,
        box = FALSE,
        legend = FALSE,
-       cex.main = 5,
+       cex.main = 4,
        col = color,
        breaks = seq(0, 1, 0.125))
   
@@ -124,6 +126,7 @@ plot_result_deepsdm <- function(spyrmon, species, xm, extent_binary, pall, pseas
   dev.off()
 }
 
+# function of auc_roc calculations
 calculate_roc <- function(px, p, bg){
   if(nrow(p) == 0){
     return(-9)
@@ -137,21 +140,28 @@ calculate_roc <- function(px, p, bg){
   }
 }
 
-
-if (!dir.exists('predicts_maxent')){
-  dir.create('predicts_maxent')
-}
-
 for(f in files[r_start:r_end]){
+  # f <- '_Strix-nivicolum-2018-01-01_predict.tif'
   # f <- files[1]
   print(paste('start', f))
-  f_split <- ((f %>% strsplit('_'))[[1]][2] %>% strsplit('-'))[[1]] # "Acridotheres", "cristatellus", "2018", "01", "01"
+  f_split <- (f %>% strsplit('_'))[[1]] # "Acridotheres", "cristatellus", "2018-01-01"
   species <- paste(f_split[1], f_split[2], sep = '_')
-  species_ <- paste(f_split[1], f_split[2], sep = '-')
-
-  spyrmon <- paste(f_split[1], f_split[2], f_split[3], f_split[4], f_split[5], sep = '_')
-  yrmon <-paste0(f_split[3], '-', f_split[4])
-  yrmonday <- paste0(f_split[3], '-', f_split[4], '-', f_split[5])
+  date_split <- (f_split[3] %>% strsplit('-'))[[1]] # "2018", "01", "01"
+  
+  spyrmon <- paste(f_split[1], f_split[2], date_split[1], date_split[2], sep = '_')
+  yrmon <-paste0(date_split[1], '-', date_split[2])
+  yrmonday <- paste0(date_split[1], '-', date_split[2], '-', date_split[3])
+  
+  # create folder 
+  dir_base_timelog <- file.path('predict_maxent', timelog)
+  dir_timelog_png <- file.path(dir_base_timelog, 'png')
+  if (!dir.exists(dir_timelog_png)){
+    dir.create(dir_timelog_png, recursive = T)
+  }
+  dir_timelog_tif <- file.path(dir_base_timelog, 'tif')
+  if (!dir.exists(dir_timelog_tif)){
+    dir.create(dir_timelog_tif, recursive = T)
+  }
   
   # load env layers of season
   files_env <- c()
@@ -163,17 +173,18 @@ for(f in files[r_start:r_end]){
   env_season <- raster::stack(files_env)
   names(env_season) <- sort(DeepSDM_conf$env_list)
   
-  list.files(sprintf('workspace/raster_data/species_occurrence/%s', species))
-  tif <- raster::raster(sprintf('workspace/raster_data/species_occurrence/%s/%s_%s.tif', species, species, yrmonday))
-  xy_p_season <- xyFromCell(tif, which(values(tif) == 1)) # x,y value from cells with presence records
-  xy_p_season_trainsplit <- xyFromCell(tif, which((values(tif) == 1) & (values(trainval_split) == 1)))
-  xy_p_season_valsplit <- xyFromCell(tif, which((values(tif) == 1) & (values(trainval_split) == 0)))
-
-  xy_pa_season <- xyFromCell(tif, which((values(tif) == 0) & (!is.na(values(extent_binary)))))
-  xy_pa_season_sample <- xy_pa_season[sample(nrow(xy_pa_season), 10000), ]
-  xy_pa_season_sample_trainsplit <- xy_pa_season_sample[which(values(trainval_split)[cellFromXY(trainval_split, xy_pa_season_sample)] == 1), ]
-  xy_pa_season_sample_valsplit <- xy_pa_season_sample[which(values(trainval_split)[cellFromXY(trainval_split, xy_pa_season_sample)] == 0), ]
+  occ_rst <- raster::raster(sprintf('workspace/raster_data/species_occurrence/%s/%s_%s.tif', species, species, yrmonday))
+  i_p_occ_rst <- which(values(occ_rst) == 1)
+  i_pa_occ_rst <- which(values(occ_rst) == 0)
+  xy_p_season <- xyFromCell(occ_rst, i_p_occ_rst) # x,y value from cells with presence records
+  xy_p_season_trainsplit <- xyFromCell(occ_rst, intersect(i_p_occ_rst, i_trainsplit))
+  xy_p_season_valsplit <- xyFromCell(occ_rst, intersect(i_p_occ_rst, i_valsplit))
   
+  i_pa_season <- intersect(i_pa_occ_rst, i_extent)
+  xy_pa_season <- xyFromCell(occ_rst, i_pa_season)
+  i_pa_season_sample <- sample(i_pa_season, 10000)
+  xy_pa_season_sample_trainsplit <- xyFromCell(occ_rst, intersect(i_pa_season_sample, i_trainsplit))
+  xy_pa_season_sample_valsplit <- xyFromCell(occ_rst, intersect(i_pa_season_sample, i_valsplit))
   
   maxent_season_season_val = -9
   maxent_season_seasonavg_val = -9
@@ -185,7 +196,7 @@ for(f in files[r_start:r_end]){
   maxent_all_seasonavg_val = -9
   maxent_all_all_val = -9
   deepsdm_all_season_val = -9
-  deepsdm_all__seasonavg_val = -9
+  deepsdm_all_seasonavg_val = -9
   deepsdm_all_all_val = -9
   maxent_season_season_train = -9
   maxent_season_seasonavg_train = -9
@@ -283,11 +294,11 @@ for(f in files[r_start:r_end]){
   xm_season <- try(maxent(x = env_season, p = xy_p_season_trainsplit, a = xy_pa_season_sample_trainsplit), silent = T)
   if(!is.character(xm_season)){
 
-    write.csv(xm_season@results,
-              file.path('for_testing',
-                        paste('result', time_log, sep = '_'),
-                        species,
-                        paste(spyrmon, 'env_contribution_maxent456.csv', sep = '_')))
+    # write.csv(xm_season@results,
+    #           file.path('for_testing',
+    #                     paste('result', time_log, sep = '_'),
+    #                     species,
+    #                     paste(spyrmon, 'env_contribution_maxent456.csv', sep = '_')))
 
     # px456_all <- predict(envall, xm456)
     # 
@@ -305,18 +316,18 @@ for(f in files[r_start:r_end]){
 
     px_season_season <- predict_maxent(env_season, xm_season)
 
-    plot_result(spyrmon, species, px_season_season, extent_binary, xy_p_season, xy_p_season, xy_p_season, 'maxent_season_season')
+    plot_result(spyrmon, species, px_season_season, extent_binary, xy_p_season, xy_p_season, xy_p_season, 'maxent_season_season', dir_timelog_png, dir_timelog_tif, timelog)
     maxent_season_season_train <- calculate_roc(px_season_season, xy_p_season_trainsplit, xy_pa_season_sample_trainsplit)
     maxent_season_season_val <- calculate_roc(px_season_season, xy_p_season_valsplit, xy_pa_season_sample_valsplit)
   }
-  deepsdm <- raster::raster(sprintf('predicts/tif/_%s-%s_predict.tif', species_, yrmonday))
+  deepsdm <- raster::raster(sprintf('predicts/%s/tif/%s', timelog, f))
   # deepsdmall_all_train <- try(calculate_roc(deepsdm, p_trainall, bg_trainall))
   # deepsdmall_all_test <- try(calculate_roc(deepsdm, p_testall, bg_testall))
   # deepsdmall_12_train <- try(calculate_roc(deepsdm, p_train12, bg_train12))
   # deepsdmall_12_test <- try(calculate_roc(deepsdm, p_test12, bg_test12))
   deepsdm_all_season_train <- try(calculate_roc(deepsdm, xy_p_season_trainsplit, xy_pa_season_sample_trainsplit))
   deepsdm_all_season_val <- try(calculate_roc(deepsdm, xy_p_season_valsplit, xy_pa_season_sample_valsplit))
-  plot_result_deepsdm(spyrmon, species, deepsdm, extent_binary, xy_p_season, xy_p_season, xy_p_season, 'deepsdm_all_season')
+  plot_result_deepsdm(spyrmon, species, deepsdm, extent_binary, xy_p_season, xy_p_season, xy_p_season, 'deepsdm_all_season', dir_timelog_png, timelog)
   
   df[nrow(df)+1, ] <- c(spyrmon,
                         maxent_season_season_val, maxent_season_seasonavg_val, maxent_season_all_val,
@@ -331,14 +342,7 @@ for(f in files[r_start:r_end]){
                         p_seasonavg, p_valpart_seasonavg, p_trainpart_seasonavg, pa_valpart_seasonavg, pa_trainpart_seasonavg,
                         p_all, p_valpart_all, p_trainpart_all, pa_valpart_all, pa_trainpart_all)
 }
-if(!file.exists(file.path('for_testing', paste('result', time_log, sep = '_'), epoch))){
-  file.create(file.path('for_testing', paste('result', time_log, sep = '_'), epoch))
-}
-write.csv(d, 
-          file.path('for_testing', 
-                    paste('result', time_log, sep = '_'), 
-                    epoch, 
-                    paste('auc_result', paste0(r_start, '.csv'), sep = '_')), 
-          row.names = FALSE)
+
+write.csv(df, sprintf('predicts_maxent/auc_result_%s.csv', r_start), row.names = FALSE)
 
 
