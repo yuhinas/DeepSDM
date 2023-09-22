@@ -8,42 +8,46 @@ from LitDeepSDMData import LitDeepSDMData
 from LitUNetSDM import LitUNetSDM
 import yaml
 
+# Define timelog
+timelog = time.strftime('%Y%m%d%H%M%S', time.localtime())
+
 # load configurations
 with open('DeepSDM_conf.yaml', 'r') as f:
     DeepSDM_conf = yaml.load(f, Loader = yaml.FullLoader)
 DeepSDM_conf = SimpleNamespace(**DeepSDM_conf)
 
-date_list = []
 # lists of selected dates for training
 # format: YYYY_MM_01
 # The python range exclude the stop value (here e.g. 2020)
 # So here we generate from 2016_01_01 to 2019_12_01
 # We keep data of 2020 for validation/prediction
-for y_ in range(2000, 2019):
-    for m_ in range(1, 13):
-        date_list.append(f'{y_:04d}-{m_:02d}-01')
+# date_list_train = []
+# for y_ in range(2000, 2019):
+#     for m_ in range(1, 13):
+#         date_list_train.append(f'{y_:04d}-{m_:02d}-01')
 
+        
 # packed the species lists and date lists for training
 info = SimpleNamespace(**dict(
     env_list = sorted(DeepSDM_conf.env_list),
     non_normalize_env_list = sorted(DeepSDM_conf.non_normalize_env_list),
-    species_list = sorted(DeepSDM_conf.species_list),
-    species_list_val = sorted(DeepSDM_conf.species_list),
+    species_list = sorted(DeepSDM_conf.species_list_train),
+    species_list_val = sorted(DeepSDM_conf.species_list_train),
     species_list_smoothviz = sorted(DeepSDM_conf.species_list_smoothviz),
-    date_list = sorted(date_list),
-    date_list_val = sorted(date_list),
+    date_list = sorted(DeepSDM_conf.date_list_train),
+    date_list_val = sorted(DeepSDM_conf.date_list_train),
     date_list_smoothviz = sorted(DeepSDM_conf.date_list_smoothviz)
 ))
 conf = SimpleNamespace(**DeepSDM_conf.conf)
 conf.num_env = len(DeepSDM_conf.env_list) # number of environmental layers
 conf.num_vector = DeepSDM_conf.embedding_conf['num_vector'] # number of vectors for the embeddings of species co-occurrence
 
+# update configurations
 
 ### LOGGER
 # Use mlflow to auto logging pytorch lightning everything
 mlflow.set_experiment(conf.experiment_name)
 mlflow.pytorch.autolog()
-timelog = time.strftime('%Y%m%d%H%M%S', time.localtime())
 
 ### DATA
 # initialize the lightning data module
@@ -76,8 +80,6 @@ early_stop_callback = EarlyStopping(
 # change the devices number if you have only 1 GPU or more GPUs
 # We use half precision for less memory usage and faster calculations
 trainer_conf = SimpleNamespace(**DeepSDM_conf.trainer_conf)
-logger = pl.loggers.TensorBoardLogger(save_dir = './', version = timelog)
-logger.log_hyperparams(vars(DeepSDM_conf))
 trainer = pl.Trainer(
     max_epochs = conf.epochs, 
     devices = trainer_conf.devices, 
@@ -86,7 +88,7 @@ trainer = pl.Trainer(
     strategy = DDPStrategy(static_graph=True), # use 'ddp_fork_find_unused_parameters_true' instead on jupyter or colab
     precision = trainer_conf.precision, 
     callbacks = [checkpoint_callback, early_stop_callback], 
-    logger = logger
+    logger = pl.loggers.TensorBoardLogger(save_dir = './', version = timelog)
 )
 
 # Start the training!

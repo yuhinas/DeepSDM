@@ -11,6 +11,10 @@ from torchmetrics.functional.classification import binary_f1_score, binary_auroc
 import mlflow
 import os
 import rasterio
+import yaml
+from collections import OrderedDict
+from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
+
 
 class LitUNetSDM(pl.LightningModule):
     def __init__(self, info, conf):
@@ -590,3 +594,37 @@ class LitUNetSDM(pl.LightningModule):
             results[f'{sp_}_{date_}'] = np.stack([label, result_masked_npy])
             
         return results
+    
+    def on_fit_start(self):
+        if self.trainer.global_rank == 0:
+            active_run_ = mlflow.active_run()
+            run_name = active_run_.info.run_name
+            with open('DeepSDM_conf.yaml', 'r') as f:
+                DeepSDM_conf = yaml.load(f, Loader = yaml.FullLoader)
+            DeepSDM_conf['conf'] = vars(self.conf)
+            DeepSDM_conf['timelog'] = run_name
+            with open('DeepSDM_conf.yaml', 'w') as f:
+                yaml.dump(DeepSDM_conf, f)
+            mlflow.log_artifact('DeepSDM_conf.yaml', artifact_path = 'conf')
+            mlflow.log_artifact('workspace/cooccurrence_vector.json', artifact_path = 'conf')
+            mlflow.log_artifact('workspace/env_information.json', artifact_path = 'conf')
+            mlflow.log_artifact('workspace/k_information.json', artifact_path = 'conf')
+            mlflow.log_artifact('workspace/species_information.json', artifact_path = 'conf')
+
+    def on_fit_end(self):
+        if self.trainer.global_rank == 0:
+            for cb in self.trainer.callbacks:
+                if isinstance(cb, ModelCheckpoint):
+                    mean_state_dict = None
+                    for model_path, monitered_value in cb.best_k_models.items():
+                        
+                        state_dict = torch.load(model_path)['state_dict']
+                        if mean_state_dict is None:
+                            mean_state_dict = state_dict
+                        else:
+                            for key in state_dict:
+                                mean_state_dict[key] = mean_state_dict[key] + state_dict[key]
+                    for key in mean_state_dict:
+                        mean_state_dict[key] = mean_state_dict[key] / len(cb.best_k_models.items())
+                        
+                    mlflow.pytorch.log_state_dict(mean_state_dict, artifact_path = 'avg_state_dict')

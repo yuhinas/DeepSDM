@@ -1,101 +1,374 @@
-spatial_conf_tmp:
-    x_start: 119.95 # the western bound of longitude in decimal
-    y_start: 21.85 # the southern bound latitude in decimal 
-    num_of_grid_x: 3
-    num_of_grid_y: 5
-    grid_size: 112 # number of cells per side of a grid must >= 56
-    out_res: 0.00625 # the decimal coordinates resolution of a cell
-
-temporal_conf:
-    date_start: '2000-01-01'
-    date_end: '2018-12-31'
-    month_span: 3
-    month_step: 1
-    cooccurrence_day_limit: 14 # the day span for considered cooccurrence
-    
-file_make_extent: /work/klok0126/Chelsa/cmi_/CHELSA_cmi_09_2017_V.2.1.tif
-
-gbif_occurrence_csv: /home/klok0126/DeepSDM/raw/species_occurrence_raw_all.csv
-
-env_raw_conf:
-    clt:
-    - env_out_template: clt_[YEAR]_[MONTH].tif
-      filename_template: CHELSA_clt_[MONTH]_[YEAR]_V.2.1.tif
-      raw_env_dir: /work/klok0126/Chelsa/clt_
-    cmi:
-    - env_out_template: cmi_[YEAR]_[MONTH].tif
-      filename_template: CHELSA_cmi_[MONTH]_[YEAR]_V.2.1.tif
-      raw_env_dir: /work/klok0126/Chelsa/cmi_
-    hurs:
-    - env_out_template: hurs_[YEAR]_[MONTH].tif
-      filename_template: CHELSA_hurs_[MONTH]_[YEAR]_V.2.1.tif
-      raw_env_dir: /work/klok0126/Chelsa/hurs_
-    pet:
-    - env_out_template: pet_[YEAR]_[MONTH].tif
-      filename_template: CHELSA_pet_penman_[MONTH]_[YEAR]_V.2.1.tif
-      raw_env_dir: /work/klok0126/Chelsa/pet_
-    pr:
-    - env_out_template: pr_[YEAR]_[MONTH].tif
-      filename_template: CHELSA_pr_[MONTH]_[YEAR]_V.2.1.tif
-      raw_env_dir: /work/klok0126/Chelsa/pr_
-    rsds:
-    - env_out_template: rsds_[YEAR]_[MONTH].tif
-      filename_template: CHELSA_rsds_[YEAR]_[MONTH]_V.2.1.tif
-      raw_env_dir: /work/klok0126/Chelsa/rsds_
-    sfcWind:
-    - env_out_template: sfcWind_[YEAR]_[MONTH].tif
-      filename_template: CHELSA_sfcWind_[MONTH]_[YEAR]_V.2.1.tif
-      raw_env_dir: /work/klok0126/Chelsa/sfcWind_
-    tas:
-    - env_out_template: tas_[YEAR]_[MONTH].tif
-      filename_template: CHELSA_tas_[MONTH]_[YEAR]_V.2.1.tif
-      raw_env_dir: /work/klok0126/Chelsa/tas_
-    tasmax:
-    - env_out_template: tasmax_[YEAR]_[MONTH].tif
-      filename_template: CHELSA_tasmax_[MONTH]_[YEAR]_V.2.1.tif
-      raw_env_dir: /work/klok0126/Chelsa/tasmax_
-    tasmin:
-    - env_out_template: tasmin_[YEAR]_[MONTH].tif
-      filename_template: CHELSA_tasmin_[MONTH]_[YEAR]_V.2.1.tif
-      raw_env_dir: /work/klok0126/Chelsa/tasmin_
-    vpd:
-    - env_out_template: vpd_[YEAR]_[MONTH].tif
-      filename_template: CHELSA_vpd_[MONTH]_[YEAR]_V.2.1.tif
-      raw_env_dir: /work/klok0126/Chelsa/vpd_
-        
 CCI_conf:
-    landcover:
-    - PCA: 0.99
-      env_out_template: landcover_[CLASS]/landcover_[CLASS]_[YEAR].tif
-      filename_template: ESACCI-LC-L4-LCCS-Map-300m-P1Y-[YEAR]-v2.0.7cds.nc
-      layer_name: lccs_class
-      raw_env_dir: /work/klok0126/landcover
-      unique_class: [10, 11, 12, 20, 30, 40, 50, 60, 61, 62, 70, 71, 72, 80, 81, 82, 90, 100, 110, 120, 121, 122, 130, 140, 150, 151, 152, 153, 160, 170, 180, 190, 200, 201, 202, 210, 220]
-      year_coverages:
-      - 2000
-      - 2015
-    - PCA: 0.99
-      env_out_template: landcover_[CLASS]/landcover_[CLASS]_[YEAR].tif
-      filename_template: C3S-LC-L4-LCCS-Map-300m-P1Y-[YEAR]-v2.1.1.nc
-      layer_name: lccs_class
-      raw_env_dir: /work/klok0126/landcover
-      unique_class: [10, 11, 12, 20, 30, 40, 50, 60, 61, 62, 70, 71, 72, 80, 81, 82, 90, 100, 110, 120, 121, 122, 130, 140, 150, 151, 152, 153, 160, 170, 180, 190, 200, 201, 202, 210, 220]
-      year_coverages:
-      - 2016
-      - 2020
-      
-embedding_conf:
-    batch_size: 1000
-    epochs: 2000
-    num_neg: 10
-    num_vector: 64
-
+  landcover:
+  - PCA: 0.99
+    env_out_template: landcover_[CLASS]/landcover_[CLASS]_[YEAR].tif
+    filename_template: ESACCI-LC-L4-LCCS-Map-300m-P1Y-[YEAR]-v2.0.7cds.nc
+    layer_name: lccs_class
+    raw_env_dir: /work/klok0126/landcover
+    unique_class:
+    - 10
+    - 11
+    - 12
+    - 20
+    - 30
+    - 40
+    - 50
+    - 60
+    - 61
+    - 62
+    - 70
+    - 71
+    - 72
+    - 80
+    - 81
+    - 82
+    - 90
+    - 100
+    - 110
+    - 120
+    - 121
+    - 122
+    - 130
+    - 140
+    - 150
+    - 151
+    - 152
+    - 153
+    - 160
+    - 170
+    - 180
+    - 190
+    - 200
+    - 201
+    - 202
+    - 210
+    - 220
+    year_coverages:
+    - 2000
+    - 2015
+  - PCA: 0.99
+    env_out_template: landcover_[CLASS]/landcover_[CLASS]_[YEAR].tif
+    filename_template: C3S-LC-L4-LCCS-Map-300m-P1Y-[YEAR]-v2.1.1.nc
+    layer_name: lccs_class
+    raw_env_dir: /work/klok0126/landcover
+    unique_class:
+    - 10
+    - 11
+    - 12
+    - 20
+    - 30
+    - 40
+    - 50
+    - 60
+    - 61
+    - 62
+    - 70
+    - 71
+    - 72
+    - 80
+    - 81
+    - 82
+    - 90
+    - 100
+    - 110
+    - 120
+    - 121
+    - 122
+    - 130
+    - 140
+    - 150
+    - 151
+    - 152
+    - 153
+    - 160
+    - 170
+    - 180
+    - 190
+    - 200
+    - 201
+    - 202
+    - 210
+    - 220
+    year_coverages:
+    - 2016
+    - 2020
+conf:
+  batch_size: 250
+  epochs: 300
+  experiment_name: DeepSDM DEMO
+  k2_p: 0.3333333333333333
+  k3: 0.08333333333333333
+  learning_rate: 0.0001
+  num_predict_steps: 14
+  num_smoothviz_steps: 7
+  num_train_subsample_stacks: 1
+  num_val_subsample_stacks: 1
+  subsample_height: 56
+  subsample_width: 56
+  num_env: 21
+  num_vector: 64
 cooccurrence_conf:
-    sp_filter_from: ./workspace/species_data/occurrence_data/species_occurrence_filter.csv
-    cooccurrence_xy_mul: 1
-    cooccurrence_day_mul: 1
-    
-# List those environment rasters for training, must be equal to or be a subset of env_list in step 01_prepare_data.
+  cooccurrence_day_mul: 1
+  cooccurrence_xy_mul: 1
+  sp_filter_from: ./workspace/species_data/occurrence_data/species_occurrence_filter.csv
+date_list_predict:
+- '2018-01-01'
+- '2018-02-01'
+- '2018-03-01'
+- '2018-04-01'
+- '2018-05-01'
+- '2018-06-01'
+- '2018-07-01'
+- '2018-08-01'
+- '2018-09-01'
+- '2018-10-01'
+- '2018-11-01'
+- '2018-12-01'
+date_list_smoothviz:
+- '2018-01-01'
+- '2018-04-01'
+- '2018-07-01'
+- '2018-10-01'
+date_list_train:
+- '2000-01-01'
+- '2000-02-01'
+- '2000-03-01'
+- '2000-04-01'
+- '2000-05-01'
+- '2000-06-01'
+- '2000-07-01'
+- '2000-08-01'
+- '2000-09-01'
+- '2000-10-01'
+- '2000-11-01'
+- '2000-12-01'
+- '2001-01-01'
+- '2001-02-01'
+- '2001-03-01'
+- '2001-04-01'
+- '2001-05-01'
+- '2001-06-01'
+- '2001-07-01'
+- '2001-08-01'
+- '2001-09-01'
+- '2001-10-01'
+- '2001-11-01'
+- '2001-12-01'
+- '2002-01-01'
+- '2002-02-01'
+- '2002-03-01'
+- '2002-04-01'
+- '2002-05-01'
+- '2002-06-01'
+- '2002-07-01'
+- '2002-08-01'
+- '2002-09-01'
+- '2002-10-01'
+- '2002-11-01'
+- '2002-12-01'
+- '2003-01-01'
+- '2003-02-01'
+- '2003-03-01'
+- '2003-04-01'
+- '2003-05-01'
+- '2003-06-01'
+- '2003-07-01'
+- '2003-08-01'
+- '2003-09-01'
+- '2003-10-01'
+- '2003-11-01'
+- '2003-12-01'
+- '2004-01-01'
+- '2004-02-01'
+- '2004-03-01'
+- '2004-04-01'
+- '2004-05-01'
+- '2004-06-01'
+- '2004-07-01'
+- '2004-08-01'
+- '2004-09-01'
+- '2004-10-01'
+- '2004-11-01'
+- '2004-12-01'
+- '2005-01-01'
+- '2005-02-01'
+- '2005-03-01'
+- '2005-04-01'
+- '2005-05-01'
+- '2005-06-01'
+- '2005-07-01'
+- '2005-08-01'
+- '2005-09-01'
+- '2005-10-01'
+- '2005-11-01'
+- '2005-12-01'
+- '2006-01-01'
+- '2006-02-01'
+- '2006-03-01'
+- '2006-04-01'
+- '2006-05-01'
+- '2006-06-01'
+- '2006-07-01'
+- '2006-08-01'
+- '2006-09-01'
+- '2006-10-01'
+- '2006-11-01'
+- '2006-12-01'
+- '2007-01-01'
+- '2007-02-01'
+- '2007-03-01'
+- '2007-04-01'
+- '2007-05-01'
+- '2007-06-01'
+- '2007-07-01'
+- '2007-08-01'
+- '2007-09-01'
+- '2007-10-01'
+- '2007-11-01'
+- '2007-12-01'
+- '2008-01-01'
+- '2008-02-01'
+- '2008-03-01'
+- '2008-04-01'
+- '2008-05-01'
+- '2008-06-01'
+- '2008-07-01'
+- '2008-08-01'
+- '2008-09-01'
+- '2008-10-01'
+- '2008-11-01'
+- '2008-12-01'
+- '2009-01-01'
+- '2009-02-01'
+- '2009-03-01'
+- '2009-04-01'
+- '2009-05-01'
+- '2009-06-01'
+- '2009-07-01'
+- '2009-08-01'
+- '2009-09-01'
+- '2009-10-01'
+- '2009-11-01'
+- '2009-12-01'
+- '2010-01-01'
+- '2010-02-01'
+- '2010-03-01'
+- '2010-04-01'
+- '2010-05-01'
+- '2010-06-01'
+- '2010-07-01'
+- '2010-08-01'
+- '2010-09-01'
+- '2010-10-01'
+- '2010-11-01'
+- '2010-12-01'
+- '2011-01-01'
+- '2011-02-01'
+- '2011-03-01'
+- '2011-04-01'
+- '2011-05-01'
+- '2011-06-01'
+- '2011-07-01'
+- '2011-08-01'
+- '2011-09-01'
+- '2011-10-01'
+- '2011-11-01'
+- '2011-12-01'
+- '2012-01-01'
+- '2012-02-01'
+- '2012-03-01'
+- '2012-04-01'
+- '2012-05-01'
+- '2012-06-01'
+- '2012-07-01'
+- '2012-08-01'
+- '2012-09-01'
+- '2012-10-01'
+- '2012-11-01'
+- '2012-12-01'
+- '2013-01-01'
+- '2013-02-01'
+- '2013-03-01'
+- '2013-04-01'
+- '2013-05-01'
+- '2013-06-01'
+- '2013-07-01'
+- '2013-08-01'
+- '2013-09-01'
+- '2013-10-01'
+- '2013-11-01'
+- '2013-12-01'
+- '2014-01-01'
+- '2014-02-01'
+- '2014-03-01'
+- '2014-04-01'
+- '2014-05-01'
+- '2014-06-01'
+- '2014-07-01'
+- '2014-08-01'
+- '2014-09-01'
+- '2014-10-01'
+- '2014-11-01'
+- '2014-12-01'
+- '2015-01-01'
+- '2015-02-01'
+- '2015-03-01'
+- '2015-04-01'
+- '2015-05-01'
+- '2015-06-01'
+- '2015-07-01'
+- '2015-08-01'
+- '2015-09-01'
+- '2015-10-01'
+- '2015-11-01'
+- '2015-12-01'
+- '2016-01-01'
+- '2016-02-01'
+- '2016-03-01'
+- '2016-04-01'
+- '2016-05-01'
+- '2016-06-01'
+- '2016-07-01'
+- '2016-08-01'
+- '2016-09-01'
+- '2016-10-01'
+- '2016-11-01'
+- '2016-12-01'
+- '2017-01-01'
+- '2017-02-01'
+- '2017-03-01'
+- '2017-04-01'
+- '2017-05-01'
+- '2017-06-01'
+- '2017-07-01'
+- '2017-08-01'
+- '2017-09-01'
+- '2017-10-01'
+- '2017-11-01'
+- '2017-12-01'
+- '2018-01-01'
+- '2018-02-01'
+- '2018-03-01'
+- '2018-04-01'
+- '2018-05-01'
+- '2018-06-01'
+- '2018-07-01'
+- '2018-08-01'
+- '2018-09-01'
+- '2018-10-01'
+- '2018-11-01'
+- '2018-12-01'
+earlystopping_conf:
+  min_delta: 0.0
+  mode: max
+  monitor: f1_train
+  patience: 50
+  verbose: true
+embedding_conf:
+  batch_size: 1000
+  epochs: 2000
+  num_neg: 10
+  num_vector: 64
 env_list:
 - clt
 - cmi
@@ -108,6 +381,8 @@ env_list:
 - tasmax
 - tasmin
 - vpd
+- elev
+- EVI
 - landcover_PC00
 - landcover_PC01
 - landcover_PC02
@@ -116,9 +391,68 @@ env_list:
 - landcover_PC05
 - landcover_PC06
 - landcover_PC07
-
-# Those environment rasters that don't need normalization or are already normalized, e.g. PCA results.
-non_normalize_env_list: 
+env_raw_conf:
+  EVI:
+  - env_out_template: EVI_[YEAR]_[MONTH].tif
+    filename_template: MOD13A1.006__500m_16_days_EVI_doy[YEAR][DOY]_aid0001.tif
+    raw_env_dir: /work/klok0126/other_env/EVI
+  clt:
+  - env_out_template: clt_[YEAR]_[MONTH].tif
+    filename_template: CHELSA_clt_[MONTH]_[YEAR]_V.2.1.tif
+    raw_env_dir: /work/klok0126/Chelsa/clt_
+  cmi:
+  - env_out_template: cmi_[YEAR]_[MONTH].tif
+    filename_template: CHELSA_cmi_[MONTH]_[YEAR]_V.2.1.tif
+    raw_env_dir: /work/klok0126/Chelsa/cmi_
+  elev:
+  - env_out_template: elev.tif
+    filename_template: wc2.1_30s_elev.tif
+    raw_env_dir: /work/klok0126/other_env/elev
+  hurs:
+  - env_out_template: hurs_[YEAR]_[MONTH].tif
+    filename_template: CHELSA_hurs_[MONTH]_[YEAR]_V.2.1.tif
+    raw_env_dir: /work/klok0126/Chelsa/hurs_
+  pet:
+  - env_out_template: pet_[YEAR]_[MONTH].tif
+    filename_template: CHELSA_pet_penman_[MONTH]_[YEAR]_V.2.1.tif
+    raw_env_dir: /work/klok0126/Chelsa/pet_
+  pr:
+  - env_out_template: pr_[YEAR]_[MONTH].tif
+    filename_template: CHELSA_pr_[MONTH]_[YEAR]_V.2.1.tif
+    raw_env_dir: /work/klok0126/Chelsa/pr_
+  rsds:
+  - env_out_template: rsds_[YEAR]_[MONTH].tif
+    filename_template: CHELSA_rsds_[YEAR]_[MONTH]_V.2.1.tif
+    raw_env_dir: /work/klok0126/Chelsa/rsds_
+  sfcWind:
+  - env_out_template: sfcWind_[YEAR]_[MONTH].tif
+    filename_template: CHELSA_sfcWind_[MONTH]_[YEAR]_V.2.1.tif
+    raw_env_dir: /work/klok0126/Chelsa/sfcWind_
+  tas:
+  - env_out_template: tas_[YEAR]_[MONTH].tif
+    filename_template: CHELSA_tas_[MONTH]_[YEAR]_V.2.1.tif
+    raw_env_dir: /work/klok0126/Chelsa/tas_
+  tasmax:
+  - env_out_template: tasmax_[YEAR]_[MONTH].tif
+    filename_template: CHELSA_tasmax_[MONTH]_[YEAR]_V.2.1.tif
+    raw_env_dir: /work/klok0126/Chelsa/tasmax_
+  tasmin:
+  - env_out_template: tasmin_[YEAR]_[MONTH].tif
+    filename_template: CHELSA_tasmin_[MONTH]_[YEAR]_V.2.1.tif
+    raw_env_dir: /work/klok0126/Chelsa/tasmin_
+  vpd:
+  - env_out_template: vpd_[YEAR]_[MONTH].tif
+    filename_template: CHELSA_vpd_[MONTH]_[YEAR]_V.2.1.tif
+    raw_env_dir: /work/klok0126/Chelsa/vpd_
+file_make_extent: /work/klok0126/Chelsa/cmi_/CHELSA_cmi_09_2017_V.2.1.tif
+gbif_occurrence_csv: /home/klok0126/DeepSDM/raw/species_occurrence_raw_all.csv
+model_checkpoint_conf:
+  mode: max
+  monitor: f1_train
+  save_last: true
+  save_top_k: 3
+  verbose: true
+non_normalize_env_list:
 - landcover_PC00
 - landcover_PC01
 - landcover_PC02
@@ -127,59 +461,186 @@ non_normalize_env_list:
 - landcover_PC05
 - landcover_PC06
 - landcover_PC07
-
-species_list: ['Passer_cinnamomeus', 'Carpodacus_formosanus', 'Acridotheres_cristatellus', 'Nisaetus_nipalensis', 'Corvus_macrorhynchos', 'Pycnonotus_taivanus', 'Glaucidium_brodiei', 'Psilopogon_nuchalis', 'Treron_sieboldii', 'Lonchura_atricapilla', 'Prunella_collaris', 'Hirundapus_cochinchinensis', 'Alauda_gulgula', 'Pycnonotus_sinensis', 'Suthora_verreauxi', 'Garrulax_ruficeps', 'Centropus_bengalensis', 'Treron_formosae', 'Otus_lettia', 'Enicurus_scouleri', 'Spizixos_semitorques', 'Ketupa_flavipes', 'Garrulax_taewanus', 'Motacilla_alba', 'Sitta_europaea', 'Tarsiger_johnstoniae', 'Poecile_varius', 'Elanus_caeruleus', 'Alcippe_morrisonia', 'Oriolus_traillii', 'Ardea_purpurea', 'Phasianus_colchicus', 'Horornis_acanthizoides', 'Strix_nivicolum', 'Lophura_swinhoii', 'Delichon_dasypus', 'Lonchura_striata', 'Yuhina_brunneiceps', 'Myophonus_insularis', 'Periparus_ater', 'Zosterops_simplex', 'Syrmaticus_mikado', 'Prinia_flaviventris']
-
-# lists of species and dates for smooth visualization preview
-date_list_smoothviz: 
-- '2018-01-01'
-- '2018-04-01'
-- '2018-07-01'
-- '2018-10-01'
-
-species_list_smoothviz: 
+spatial_conf_tmp:
+  grid_size: 112
+  num_of_grid_x: 3
+  num_of_grid_y: 5
+  out_res: 0.00625
+  x_start: 119.95
+  y_start: 21.85
+species_list_all_resident:
+- Abroscopus_albogularis
+- Accipiter_trivirgatus
+- Accipiter_virgatus
+- Acridotheres_cristatellus
+- Actinodura_morrisoniana
+- Aegithalos_concinnus
+- Aix_galericulata
+- Alauda_gulgula
+- Alcedo_atthis
+- Alcippe_morrisonia
+- Amaurornis_phoenicurus
+- Anas_poecilorhyncha
+- Apus_nipalensis
+- Arborophila_crudigularis
+- Ardea_alba
+- Ardea_purpurea
+- Bambusicola_sonorivox
+- Brachypteryx_goodfellowi
+- Bubulcus_ibis
+- Butorides_striata
+- Caprimulgus_affinis
+- Carpodacus_formosanus
+- Cecropis_striolata
+- Centropus_bengalensis
+- Chalcophaps_indica
+- Charadrius_alexandrinus
+- Charadrius_dubius
+- Cinclus_pallasii
+- Cisticola_exilis
+- Cisticola_juncidis
+- Columba_pulchricollis
+- Coracina_macei
+- Corvus_macrorhynchos
+- Stachyridopsis_ruficeps
+- Delichon_dasypus
+- Dendrocitta_formosae
+- Dendrocopos_leucotos
+- Dicaeum_ignipectus
+- Dicaeum_minullum
+- Dicrurus_aeneus
+- Dicrurus_macrocercus
+- Egretta_garzetta
+- Egretta_sacra
+- Elanus_caeruleus
+- Enicurus_scouleri
+- Erpornis_zantholeuca
+- Pomatorhinus_erythrocnemis
+- Falco_peregrinus
+- Ficedula_hyperythra
+- Fulvetta_formosana
+- Gallicrex_cinerea
+- Gallinula_chloropus
+- Garrulax_taewanus
+- Garrulus_glandarius
+- Gorsachius_melanolophus
+- Heterophasia_auricularis
+- Himantopus_himantopus
+- Hirundapus_cochinchinensis
+- Hirundo_tahitica
+- Horornis_acanthizoides
+- Horornis_fortipes
+- Hydrophasianus_chirurgus
+- Hypothymis_azurea
+- Hypsipetes_amaurotis
+- Hypsipetes_leucocephalus
+- Ictinaetus_malayensis
+- Ixobrychus_cinnamomeus
+- Ixobrychus_sinensis
+- Ketupa_flavipes
+- Lanius_schach
+- Gallirallus_striatus
+- Liocichla_steerii
+- Locustella_alishanensis
+- Lonchura_atricapilla
+- Lonchura_punctulata
+- Lonchura_striata
+- Lophura_swinhoii
+- Parus_holsti
+- Macropygia_tenuirostris
+- Milvus_migrans
+- Monticola_solitarius
+- Motacilla_alba
+- Myiomela_leucura
+- Myophonus_insularis
+- Niltava_vivida
+- Ninox_japonica
+- Nisaetus_nipalensis
+- Nucifraga_caryocatactes
+- Nycticorax_nycticorax
+- Oriolus_chinensis
+- Oriolus_traillii
+- Otus_elegans
+- Otus_lettia
+- Otus_spilocephalus
+- Parus_monticolus
+- Passer_cinnamomeus
+- Passer_montanus
+- Pericrocotus_solaris
+- Periparus_ater
+- Pernis_ptilorhynchus
+- Phasianus_colchicus
+- Phoenicurus_fuliginosus
+- Picus_canus
+- Pnoepyga_formosana
+- Pomatorhinus_musicus
+- Prinia_flaviventris
+- Prinia_inornata
+- Prinia_striata
+- Prunella_collaris
+- Psilopogon_nuchalis
+- Garrulax_poecilorhynchus
+- Garrulax_ruficeps
+- Pycnonotus_sinensis
+- Pycnonotus_taivanus
+- Pyrrhula_nipalensis
+- Pyrrhula_owstoni
+- Rallina_eurizonoides
+- Regulus_goodfellowi
+- Riparia_chinensis
+- Rostratula_benghalensis
+- Alcippe_brunnea
+- Sinosuthora_webbiana
+- Sitta_europaea
+- Poecile_varius
+- Spilopelia_chinensis
+- Spilornis_cheela
+- Spizixos_semitorques
+- Sternula_albifrons
+- Streptopelia_orientalis
+- Streptopelia_tranquebarica
+- Strix_leptogrammica
+- Strix_nivicolum
+- Suthora_verreauxi
+- Coturnix_chinensis
+- Syrmaticus_mikado
+- Tachybaptus_ruficollis
+- Glaucidium_brodiei
+- Tarsiger_indicus
+- Tarsiger_johnstoniae
+- Terpsiphone_atrocaudata
+- Treron_formosae
+- Treron_sieboldii
+- Trochalopteron_morrisonianum
+- Troglodytes_troglodytes
+- Turdus_mandarinus
+- Turdus_poliocephalus
+- Turnix_suscitator
+- Turnix_sylvaticus
+- Tyto_longimembris
+- Urocissa_caerulea
+- Yuhina_brunneiceps
+- Yungipicus_canicapillus
+- Porzana_fusca
+- Zoothera_dauma
+- Zosterops_japonicus
+- Zosterops_meyeni
+- Zosterops_simplex
+species_list_predict: ['Passer_cinnamomeus', 'Carpodacus_formosanus', 'Acridotheres_cristatellus', 'Nisaetus_nipalensis', 'Corvus_macrorhynchos', 'Pycnonotus_taivanus', 'Glaucidium_brodiei', 'Psilopogon_nuchalis', 'Treron_sieboldii', 'Lonchura_atricapilla', 'Prunella_collaris', 'Hirundapus_cochinchinensis', 'Alauda_gulgula', 'Pycnonotus_sinensis', 'Suthora_verreauxi', 'Garrulax_ruficeps', 'Centropus_bengalensis', 'Treron_formosae', 'Otus_lettia', 'Enicurus_scouleri', 'Spizixos_semitorques', 'Ketupa_flavipes', 'Garrulax_taewanus', 'Motacilla_alba', 'Sitta_europaea', 'Tarsiger_johnstoniae', 'Poecile_varius', 'Elanus_caeruleus', 'Alcippe_morrisonia', 'Oriolus_traillii', 'Ardea_purpurea', 'Phasianus_colchicus', 'Horornis_acanthizoides', 'Strix_nivicolum', 'Lophura_swinhoii', 'Delichon_dasypus', 'Lonchura_striata', 'Yuhina_brunneiceps', 'Myophonus_insularis', 'Periparus_ater', 'Zosterops_simplex', 'Syrmaticus_mikado', 'Prinia_flaviventris']
+species_list_smoothviz:
 - Psilopogon_nuchalis
 - Yuhina_brunneiceps
 - Corvus_macrorhynchos
 - Syrmaticus_mikado
-
-conf: 
-    # The effective batch size = base_batch * num_of_devices * num_of_nodes
-    batch_size: 300 # modify this value if OOM (out of cude memory) encountered
-    epochs: 300 # Change the values according to any baseline result. For example, if the training stops at epoch 300 and the metric monitored is still ascending (descending), extend this value
-    experiment_name: DeepSDM DEMO
-    k3: 0.08333333333333333 # constant value of k3, confidence of absence
-    learning_rate: 0.0001 # Usually you don't have to change this
-    num_predict_steps: 14 # the steps for smooth visualization, must be a factor of 56, the higher the smoother, and slower
-    num_smoothviz_steps: 7 # the steps for smooth visualization, must be a factor of 56, the higher the smoother, and slower
-    num_train_subsample_stacks: 1 # the number of random training subsamples that sampled from the training grids
-    num_val_subsample_stacks: 1 # the number of validation subsamples that sampled from the validation grids
-    k2_p: 0.3333333333333333 # the exponential decay rate 
-    subsample_height: 56 # must be 8 * N, for the requirements of UNET
-    subsample_width: 56 # must be 8 * N, for the requirements of UNET
-
-model_checkpoint_conf:
-    mode: max
-    monitor: f1_train
-    save_last: true
-    save_top_k: 3
-    verbose: true
-
-earlystopping_conf: 
-    min_delta: 0.0
-    mode: max
-    monitor: f1_train
-    patience: 50
-    verbose: true
-    
-trainer_conf: 
-    accelerator: gpu
-    check_val_every_n_epoch: 1
-    devices: 4
-    max_epochs: 300
-    precision: 32
-
-species_list_predict: ['Passer_cinnamomeus', 'Carpodacus_formosanus', 'Acridotheres_cristatellus', 'Nisaetus_nipalensis', 'Corvus_macrorhynchos', 'Pycnonotus_taivanus', 'Glaucidium_brodiei', 'Psilopogon_nuchalis', 'Treron_sieboldii', 'Lonchura_atricapilla', 'Prunella_collaris', 'Hirundapus_cochinchinensis', 'Alauda_gulgula', 'Pycnonotus_sinensis', 'Suthora_verreauxi', 'Garrulax_ruficeps', 'Centropus_bengalensis', 'Treron_formosae', 'Otus_lettia', 'Enicurus_scouleri', 'Spizixos_semitorques', 'Ketupa_flavipes', 'Garrulax_taewanus', 'Motacilla_alba', 'Sitta_europaea', 'Tarsiger_johnstoniae', 'Poecile_varius', 'Elanus_caeruleus', 'Alcippe_morrisonia', 'Oriolus_traillii', 'Ardea_purpurea', 'Phasianus_colchicus', 'Horornis_acanthizoides', 'Strix_nivicolum', 'Lophura_swinhoii', 'Delichon_dasypus', 'Lonchura_striata', 'Yuhina_brunneiceps', 'Myophonus_insularis', 'Periparus_ater', 'Zosterops_simplex', 'Syrmaticus_mikado', 'Prinia_flaviventris']
-
-# all resident bird
-species_list_all_resident: ['Abroscopus_albogularis', 'Accipiter_trivirgatus', 'Accipiter_virgatus', 'Acridotheres_cristatellus', 'Actinodura_morrisoniana', 'Aegithalos_concinnus', 'Aix_galericulata', 'Alauda_gulgula', 'Alcedo_atthis', 'Alcippe_morrisonia', 'Amaurornis_phoenicurus', 'Anas_poecilorhyncha', 'Apus_nipalensis', 'Arborophila_crudigularis', 'Ardea_alba', 'Ardea_purpurea', 'Bambusicola_sonorivox', 'Brachypteryx_goodfellowi', 'Bubulcus_ibis', 'Butorides_striata', 'Caprimulgus_affinis', 'Carpodacus_formosanus', 'Cecropis_striolata', 'Centropus_bengalensis', 'Chalcophaps_indica', 'Charadrius_alexandrinus', 'Charadrius_dubius', 'Cinclus_pallasii', 'Cisticola_exilis', 'Cisticola_juncidis', 'Columba_pulchricollis', 'Coracina_macei', 'Corvus_macrorhynchos', 'Stachyridopsis_ruficeps', 'Delichon_dasypus', 'Dendrocitta_formosae', 'Dendrocopos_leucotos', 'Dicaeum_ignipectus', 'Dicaeum_minullum', 'Dicrurus_aeneus', 'Dicrurus_macrocercus', 'Egretta_garzetta', 'Egretta_sacra', 'Elanus_caeruleus', 'Enicurus_scouleri', 'Erpornis_zantholeuca', 'Pomatorhinus_erythrocnemis', 'Falco_peregrinus', 'Ficedula_hyperythra', 'Fulvetta_formosana', 'Gallicrex_cinerea', 'Gallinula_chloropus', 'Garrulax_taewanus', 'Garrulus_glandarius', 'Gorsachius_melanolophus', 'Heterophasia_auricularis', 'Himantopus_himantopus', 'Hirundapus_cochinchinensis', 'Hirundo_tahitica', 'Horornis_acanthizoides', 'Horornis_fortipes', 'Hydrophasianus_chirurgus', 'Hypothymis_azurea', 'Hypsipetes_amaurotis', 'Hypsipetes_leucocephalus', 'Ictinaetus_malayensis', 'Ixobrychus_cinnamomeus', 'Ixobrychus_sinensis', 'Ketupa_flavipes', 'Lanius_schach', 'Gallirallus_striatus', 'Liocichla_steerii', 'Locustella_alishanensis', 'Lonchura_atricapilla', 'Lonchura_punctulata', 'Lonchura_striata', 'Lophura_swinhoii', 'Parus_holsti', 'Macropygia_tenuirostris', 'Milvus_migrans', 'Monticola_solitarius', 'Motacilla_alba', 'Myiomela_leucura', 'Myophonus_insularis', 'Niltava_vivida', 'Ninox_japonica', 'Nisaetus_nipalensis', 'Nucifraga_caryocatactes', 'Nycticorax_nycticorax', 'Oriolus_chinensis', 'Oriolus_traillii', 'Otus_elegans', 'Otus_lettia', 'Otus_spilocephalus', 'Parus_monticolus', 'Passer_cinnamomeus', 'Passer_montanus', 'Pericrocotus_solaris', 'Periparus_ater', 'Pernis_ptilorhynchus', 'Phasianus_colchicus', 'Phoenicurus_fuliginosus', 'Picus_canus', 'Pnoepyga_formosana', 'Pomatorhinus_musicus', 'Prinia_flaviventris', 'Prinia_inornata', 'Prinia_striata', 'Prunella_collaris', 'Psilopogon_nuchalis', 'Garrulax_poecilorhynchus', 'Garrulax_ruficeps', 'Pycnonotus_sinensis', 'Pycnonotus_taivanus', 'Pyrrhula_nipalensis', 'Pyrrhula_owstoni', 'Rallina_eurizonoides', 'Regulus_goodfellowi', 'Riparia_chinensis', 'Rostratula_benghalensis', 'Alcippe_brunnea', 'Sinosuthora_webbiana', 'Sitta_europaea', 'Poecile_varius', 'Spilopelia_chinensis', 'Spilornis_cheela', 'Spizixos_semitorques', 'Sternula_albifrons', 'Streptopelia_orientalis', 'Streptopelia_tranquebarica', 'Strix_leptogrammica', 'Strix_nivicolum', 'Suthora_verreauxi', 'Coturnix_chinensis', 'Syrmaticus_mikado', 'Tachybaptus_ruficollis', 'Glaucidium_brodiei', 'Tarsiger_indicus', 'Tarsiger_johnstoniae', 'Terpsiphone_atrocaudata', 'Treron_formosae', 'Treron_sieboldii', 'Trochalopteron_morrisonianum', 'Troglodytes_troglodytes', 'Turdus_mandarinus', 'Turdus_poliocephalus', 'Turnix_suscitator', 'Turnix_sylvaticus', 'Tyto_longimembris', 'Urocissa_caerulea', 'Yuhina_brunneiceps', 'Yungipicus_canicapillus', 'Porzana_fusca', 'Zoothera_dauma', 'Zosterops_japonicus', 'Zosterops_meyeni', 'Zosterops_simplex']
+species_list_train: ['Passer_cinnamomeus', 'Carpodacus_formosanus', 'Acridotheres_cristatellus', 'Nisaetus_nipalensis', 'Corvus_macrorhynchos', 'Pycnonotus_taivanus', 'Glaucidium_brodiei', 'Psilopogon_nuchalis', 'Treron_sieboldii', 'Lonchura_atricapilla', 'Prunella_collaris', 'Hirundapus_cochinchinensis', 'Alauda_gulgula', 'Pycnonotus_sinensis', 'Suthora_verreauxi', 'Garrulax_ruficeps', 'Centropus_bengalensis', 'Treron_formosae', 'Otus_lettia', 'Enicurus_scouleri', 'Spizixos_semitorques', 'Ketupa_flavipes', 'Garrulax_taewanus', 'Motacilla_alba', 'Sitta_europaea', 'Tarsiger_johnstoniae', 'Poecile_varius', 'Elanus_caeruleus', 'Alcippe_morrisonia', 'Oriolus_traillii', 'Ardea_purpurea', 'Phasianus_colchicus', 'Horornis_acanthizoides', 'Strix_nivicolum', 'Lophura_swinhoii', 'Delichon_dasypus', 'Lonchura_striata', 'Yuhina_brunneiceps', 'Myophonus_insularis', 'Periparus_ater', 'Zosterops_simplex', 'Syrmaticus_mikado', 'Prinia_flaviventris']
+temporal_conf:
+  cooccurrence_day_limit: 14
+  date_end: '2018-12-31'
+  date_start: '2000-01-01'
+  month_span: 3
+  month_step: 1
+trainer_conf:
+  accelerator: gpu
+  check_val_every_n_epoch: 1
+  devices: 4
+  precision: 32
