@@ -12,19 +12,22 @@ import mlflow
 import os
 import rasterio
 import yaml
-from collections import OrderedDict
-from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
+from pytorch_lightning.callbacks import ModelCheckpoint
 
 
 class LitUNetSDM(pl.LightningModule):
-    def __init__(self, info, conf):
+    def __init__(self, yaml_conf = './DeepSDM_conf.yaml'):
         super().__init__()
-        self.info = info
-        self.conf = conf
-        self.model = Unet(num_vector = self.conf.num_vector,
-                          num_env = self.conf.num_env, 
-                          height = self.conf.subsample_height, 
-                          width = self.conf.subsample_width,
+        
+        with open(yaml_conf, 'r') as f:
+            DeepSDM_conf = SimpleNamespace(**yaml.load(f, Loader = yaml.FullLoader))
+        self.DeepSDM_conf = DeepSDM_conf
+        self.training_conf = SimpleNamespace(**DeepSDM_conf.training_conf)
+        
+        self.model = Unet(num_vector = DeepSDM_conf.embedding_conf['num_vector'],
+                          num_env = len(self.training_conf.env_list), 
+                          height = self.training_conf.subsample_height, 
+                          width = self.training_conf.subsample_width,
                         )
 
         self._init_val_step_vars()
@@ -34,7 +37,7 @@ class LitUNetSDM(pl.LightningModule):
         return self.model(env_image, bio_vector)
     
     def configure_optimizers(self):
-        optimizer = torch.optim.AdamW(self.model.parameters(), lr = self.conf.learning_rate)
+        optimizer = torch.optim.AdamW(self.model.parameters(), lr = self.training_conf.learning_rate)
         return optimizer
     
     def flatten_list(self, l):
@@ -67,7 +70,7 @@ class LitUNetSDM(pl.LightningModule):
         
         zero_tensor = torch.tensor(0, device=self.device)
         
-        k_matrix = torch.pow(k2, self.conf.k2_p)
+        k_matrix = torch.pow(k2, self.training_conf.k2_p)
         
         #l = self.bce_loss(image_output, labels)
         l = F.binary_cross_entropy_with_logits(image_output, labels.to(torch.float), reduction='none')
@@ -94,7 +97,7 @@ class LitUNetSDM(pl.LightningModule):
 
         k1_loss = l1_loss.sum() / len(image_output)
         k2_loss = l2_loss.sum() / len(image_output)
-        k3_loss = self.conf.k3 * l3_loss.sum() / len(image_output)
+        k3_loss = self.training_conf.k3 * l3_loss.sum() / len(image_output)
         total_loss = k1_loss + k2_loss + k3_loss
 
         metrics = dict(
@@ -351,8 +354,8 @@ class LitUNetSDM(pl.LightningModule):
         height_original = label_stack_smoothviz['tensor'].shape[1]
         width_original = label_stack_smoothviz['tensor'].shape[2]
         
-        subsample_height = self.conf.subsample_height
-        subsample_width = self.conf.subsample_width
+        subsample_height = self.training_conf.subsample_height
+        subsample_width = self.training_conf.subsample_width
          
         dataset_train = self.trainer.datamodule.train_dataloader().dataset
         partition = dataset_train.split_tif[:height_original, :width_original].to(self.device) #1是train部分;0是非train部分(含陸地和海)
@@ -360,7 +363,7 @@ class LitUNetSDM(pl.LightningModule):
         roc_epoch_val = []
         roc_epoch_train = []
 
-        num_of_dates = len(self.info.date_list_smoothviz)
+        num_of_dates = len(self.training_conf.date_list_smoothviz)
 #         print(label_stack_smoothviz['species_date'])
         ncols = min(num_of_dates, 4)
         nrows = int(np.ceil(num_of_dates // ncols))
@@ -511,8 +514,8 @@ class LitUNetSDM(pl.LightningModule):
 
         nan_tensor = torch.tensor(float('nan'), device=self.device)
         extent = datamodule.geo_extent[0].to(self.device) #1是預測範圍;0是非預測範圍
-        subsample_height = self.conf.subsample_height
-        subsample_width = self.conf.subsample_width
+        subsample_height = self.training_conf.subsample_height
+        subsample_width = self.training_conf.subsample_width
   
         label_stack_predict = datamodule.label_stack_predict
         env_stack_predict = datamodule.env_stack_predict
@@ -604,19 +607,16 @@ class LitUNetSDM(pl.LightningModule):
     
     def on_fit_start(self):
         if self.trainer.global_rank == 0:
-            self.tmp_path = f'./tmp/{self.conf.experiment_name}'
+            self.tmp_path = f'./tmp/{self.training_conf.experiment_name}'
             if not os.path.isdir(self.tmp_path):
                 os.makedirs(self.tmp_path)
             self.save_trainval_split()
-            with open('DeepSDM_conf.yaml', 'r') as f:
-                DeepSDM_conf = yaml.load(f, Loader = yaml.FullLoader)
-            DeepSDM_conf['conf'] = vars(self.conf)
-            DeepSDM_conf['experiment_id'] = self.logger.name
-            DeepSDM_conf['run_id'] = self.logger.run_id
+            self.DeepSDM_conf.experiment_id = self.logger.name
+            self.DeepSDM_conf.run_id = self.logger.run_id
             
             with open(f'{self.tmp_path}/DeepSDM_conf.yaml', 'w') as f:
-                yaml.dump(DeepSDM_conf, f)
-            self.DeepSDM_conf = DeepSDM_conf    
+                yaml.dump(vars(self.DeepSDM_conf), f)
+                
             self.logger.experiment.log_artifact(run_id = self.logger.run_id, local_path = f'{self.tmp_path}/DeepSDM_conf.yaml', artifact_path = 'conf')
             self.logger.experiment.log_artifact(run_id = self.logger.run_id, local_path = 'workspace/cooccurrence_vector.json', artifact_path = 'conf')
             self.logger.experiment.log_artifact(run_id = self.logger.run_id, local_path = 'workspace/env_information.json', artifact_path = 'conf')

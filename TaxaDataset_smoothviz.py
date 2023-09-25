@@ -64,7 +64,6 @@ class TaxaDataset_smoothviz(Dataset):
         width_start, width_end = idx_width_elements * self.subsample_width + step_width, (idx_width_elements + 1) * self.subsample_width + step_width
         
         inputs = self.env[:, height_start:height_end, width_start:width_end]#.cuda()
-#         embeddings = self.embedding
 
         return inputs, self.embedding, (height_start, height_end, width_start, width_end), self.species_date
     

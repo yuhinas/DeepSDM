@@ -3,9 +3,10 @@ import torch.nn.functional as F
 from torch.utils.data import Dataset
 import torchvision.transforms as transforms
 import numpy as np
+from types import SimpleNamespace
 
 class TaxaDataset(Dataset):
-    def __init__(self, env_stack, embedding, label_stack, k2_stack, trainorval, conf, cuda_id=0):
+    def __init__(self, env_stack, embedding, label_stack, k2_stack, trainorval, DeepSDM_conf, cuda_id=0):
 
         self.cuda_id = cuda_id
         
@@ -14,14 +15,14 @@ class TaxaDataset(Dataset):
         self.date_list = label_stack['date']
         self.embedding = embedding
         self.split = torch.tensor(np.loadtxt(('./workspace/partition.txt'), delimiter = ',')).to(torch.int)
-        self.conf = conf
+        self.training_conf = SimpleNamespace(**DeepSDM_conf.training_conf)
 
         if trainorval == 'train':
             self.trainorval = 1
-            self.random_stack_num = self.conf.num_train_subsample_stacks
+            self.random_stack_num = self.training_conf.num_train_subsample_stacks
         else:
             self.trainorval = 0
-            self.random_stack_num = self.conf.num_val_subsample_stacks
+            self.random_stack_num = self.training_conf.num_val_subsample_stacks
         
         self.height_original = label_stack['tensor'].shape[1]
         self.width_original = label_stack['tensor'].shape[2]
@@ -108,7 +109,7 @@ class TaxaDataset(Dataset):
 #             )
 #         ])
         self.random_transform = transforms.Compose([
-            transforms.RandomCrop(size = (self.conf.subsample_height, self.conf.subsample_width))
+            transforms.RandomCrop(size = (self.training_conf.subsample_height, self.training_conf.subsample_width))
         ])
 
         
