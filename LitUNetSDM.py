@@ -478,7 +478,7 @@ class LitUNetSDM(pl.LightningModule):
                 fig.suptitle(f'{self.trainer.state.stage}: {sp_}_ep{self.current_epoch:04d}_smoothviz')
                 plt.tight_layout()
 #                 plt.savefig(f'tmp/{sp_}_ep{self.current_epoch:04d}_smoothviz.png')
-                mlflow.log_figure(fig, f'{sp_}_ep{self.current_epoch:04d}_smoothviz.png')
+                self.logger.experiment.log_figure(figure = fig, artifact_file = f'{sp_}_ep{self.current_epoch:04d}_smoothviz.png', run_id = self.logger.run_id)
 
 #             print(time.time() - start_time)
             
@@ -493,6 +493,13 @@ class LitUNetSDM(pl.LightningModule):
 
             
     def predict(self, dataloaders_predict=[], datamodule=None, output_dir='./predicts', ref_geotiff = './workspace/extent_binary.tif'):
+        
+        # log the yaml files to the predicts folder
+        dir_out = f'{output_dir}'
+        if not os.path.isdir(dir_out):
+            os.makedirs(dir_out)
+        with open(f'{output_dir}/DeepSDM_conf.yaml', 'w') as f:
+            yaml.dump(self.DeepSDM_conf, f)
         
         dir_tif_out = f'{output_dir}/tif'
         if not os.path.isdir(dir_tif_out):
@@ -597,19 +604,24 @@ class LitUNetSDM(pl.LightningModule):
     
     def on_fit_start(self):
         if self.trainer.global_rank == 0:
-            active_run_ = mlflow.active_run()
-            run_name = active_run_.info.run_name
+            self.tmp_path = f'./tmp/{self.conf.experiment_name}'
+            if not os.path.isdir(self.tmp_path):
+                os.makedirs(self.tmp_path)
+            self.save_trainval_split()
             with open('DeepSDM_conf.yaml', 'r') as f:
                 DeepSDM_conf = yaml.load(f, Loader = yaml.FullLoader)
             DeepSDM_conf['conf'] = vars(self.conf)
-            DeepSDM_conf['timelog'] = run_name
-            with open('DeepSDM_conf.yaml', 'w') as f:
+            DeepSDM_conf['experiment_id'] = self.logger.name
+            DeepSDM_conf['run_id'] = self.logger.run_id
+            
+            with open(f'{self.tmp_path}/DeepSDM_conf.yaml', 'w') as f:
                 yaml.dump(DeepSDM_conf, f)
-            mlflow.log_artifact('DeepSDM_conf.yaml', artifact_path = 'conf')
-            mlflow.log_artifact('workspace/cooccurrence_vector.json', artifact_path = 'conf')
-            mlflow.log_artifact('workspace/env_information.json', artifact_path = 'conf')
-            mlflow.log_artifact('workspace/k_information.json', artifact_path = 'conf')
-            mlflow.log_artifact('workspace/species_information.json', artifact_path = 'conf')
+            self.DeepSDM_conf = DeepSDM_conf    
+            self.logger.experiment.log_artifact(run_id = self.logger.run_id, local_path = f'{self.tmp_path}/DeepSDM_conf.yaml', artifact_path = 'conf')
+            self.logger.experiment.log_artifact(run_id = self.logger.run_id, local_path = 'workspace/cooccurrence_vector.json', artifact_path = 'conf')
+            self.logger.experiment.log_artifact(run_id = self.logger.run_id, local_path = 'workspace/env_information.json', artifact_path = 'conf')
+            self.logger.experiment.log_artifact(run_id = self.logger.run_id, local_path = 'workspace/k_information.json', artifact_path = 'conf')
+            self.logger.experiment.log_artifact(run_id = self.logger.run_id, local_path = 'workspace/species_information.json', artifact_path = 'conf')
 
     def on_fit_end(self):
         if self.trainer.global_rank == 0:
@@ -626,5 +638,34 @@ class LitUNetSDM(pl.LightningModule):
                                 mean_state_dict[key] = mean_state_dict[key] + state_dict[key]
                     for key in mean_state_dict:
                         mean_state_dict[key] = mean_state_dict[key] / len(cb.best_k_models.items())
-                        
-                    mlflow.pytorch.log_state_dict(mean_state_dict, artifact_path = 'avg_state_dict')
+        
+                    torch.save(mean_state_dict, f'{self.tmp_path}/top_k_avg_state_dict.pt')
+                    self.logger.experiment.log_artifact(run_id = self.logger.run_id, 
+                                                        local_path = f'{self.tmp_path}/top_k_avg_state_dict.pt', 
+                                                        artifact_path = 'top_k_avg_state_dict')
+     
+    
+    
+    def save_trainval_split(self):
+        
+        dataset = self.trainer.datamodule.dataset_train
+        partition_extent = dataset.split_tif[:dataset.height_original, :dataset.width_original].numpy()
+        
+        fig_ = plt.figure()
+        plt.imshow(self.trainer.datamodule.geo_extent.squeeze() * (1 + partition_extent.squeeze()) * .25)
+        self.logger.experiment.log_figure(figure = fig_, artifact_file = 'train_val_geo_extent.png', run_id = self.logger.run_id)
+        plt.close()
+        
+        tmp_output_file = f'{self.tmp_path}/partition_extent.tif'
+        with rasterio.open(tmp_output_file,
+                           'w', 
+                           crs = self.trainer.datamodule.geo_crs,
+                           transform = self.trainer.datamodule.geo_transform,
+                           height = dataset.height_original, 
+                           width = dataset.width_original, 
+                           count = 1, 
+                           nodata = 0, 
+                           dtype = rasterio.int16) as img_towrite:
+            
+            img_towrite.write(partition_extent, 1)
+        self.logger.experiment.log_artifact(run_id = self.logger.run_id, local_path = tmp_output_file, artifact_path = 'extent_binary')

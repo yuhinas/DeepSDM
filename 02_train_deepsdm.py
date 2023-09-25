@@ -46,8 +46,8 @@ conf.num_vector = DeepSDM_conf.embedding_conf['num_vector'] # number of vectors 
 
 ### LOGGER
 # Use mlflow to auto logging pytorch lightning everything
-mlflow.set_experiment(conf.experiment_name)
-mlflow.pytorch.autolog()
+# mlflow.set_experiment(conf.experiment_name)
+mlflow.pytorch.autolog(disable = True)
 
 ### DATA
 # initialize the lightning data module
@@ -88,13 +88,14 @@ trainer = pl.Trainer(
     strategy = DDPStrategy(static_graph=True), # use 'ddp_fork_find_unused_parameters_true' instead on jupyter or colab
     precision = trainer_conf.precision, 
     callbacks = [checkpoint_callback, early_stop_callback], 
-    logger = pl.loggers.TensorBoardLogger(save_dir = './', version = timelog)
+    logger = pl.loggers.MLFlowLogger(experiment_name = conf.experiment_name, run_name = timelog, log_model = True)
 )
 
 # Start the training!
-with mlflow.start_run(run_name=f"{timelog}-{trainer.global_rank}"):
-    ### START
-    trainer.fit(model, datamodule=deep_sdm_data)
-    
+# with mlflow.start_run(run_name=f"{timelog}-{trainer.global_rank}"):
+#     ### START
+#     trainer.fit(model, datamodule=deep_sdm_data)
+trainer.fit(model, datamodule=deep_sdm_data)
+
     
 # run `mlflow ui` in the console at the path that contains 'mlruns' for monitoring the trainig

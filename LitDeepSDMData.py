@@ -28,7 +28,7 @@ class LitDeepSDMData(pl.LightningDataModule):
         meta_json_files = {
             'env_inf': './workspace/env_information.json',
             'sp_inf': './workspace/species_information.json',
-            'k_inf': './workspace/k_information.json', 
+            'k_inf': './workspace/k_information.json',
             'co_vec': './workspace/cooccurrence_vector.json',
         }
         
@@ -43,37 +43,37 @@ class LitDeepSDMData(pl.LightningDataModule):
             self.geo_transform = f.transform
             self.geo_crs = f.crs
 
-    def _save_trainval_split(self, dataset):
-
-        self.partition_extent = dataset.split_tif[:dataset.height_original, :dataset.width_original].numpy()
-        
-        fig_ = plt.figure()
-        plt.imshow(self.geo_extent.squeeze() * (1 + self.partition_extent.squeeze()) * .25)
-        mlflow.log_figure(fig_, './workspace/train_val_geo_extent.png')
-        plt.close()
-        
+#     def _save_trainval_split(self, dataset):
+# 
+#         self.partition_extent = dataset.split_tif[:dataset.height_original, :dataset.width_original].numpy()
+#         
+#         fig_ = plt.figure()
+#         plt.imshow(self.geo_extent.squeeze() * (1 + self.partition_extent.squeeze()) * .25)
+#         mlflow.log_figure(fig_, './workspace/train_val_geo_extent.png')
+#         plt.close()
+#         
 #         current_experiment=dict(mlflow.get_experiment_by_name(self.conf.experiment_name))
 #         run_name = current_experiment['run_name']
-        
-        active_run_ = mlflow.active_run()
-        run_name = active_run_.info.run_name
-        
-        if not os.path.isdir(f'./tmp/{self.conf.experiment_name}'):
-            os.makedirs(f'./tmp/{self.conf.experiment_name}')
-
-        tmp_output_file = f'./tmp/{self.conf.experiment_name}/{run_name}_partition_extent.tif'
-        with rasterio.open(tmp_output_file,
-                           'w', 
-                           crs = self.geo_crs,
-                           transform = self.geo_transform,
-                           height = dataset.height_original, 
-                           width = dataset.width_original, 
-                           count = 1, 
-                           nodata = 0, 
-                           dtype = rasterio.int16) as img_towrite:
-            
-            img_towrite.write(self.partition_extent, 1)
-        mlflow.log_artifact(tmp_output_file)
+#         
+#         active_run_ = self.logger.experiment.active_run()
+#         run_name = active_run_.info.run_name
+#         
+#         if not os.path.isdir(f'./tmp/{self.conf.experiment_name}'):
+#             os.makedirs(f'./tmp/{self.conf.experiment_name}')
+# 
+#         tmp_output_file = f'./tmp/{self.conf.experiment_name}/{run_name}_partition_extent.tif'
+#         with rasterio.open(tmp_output_file,
+#                            'w', 
+#                            crs = self.geo_crs,
+#                            transform = self.geo_transform,
+#                            height = dataset.height_original, 
+#                            width = dataset.width_original, 
+#                            count = 1, 
+#                            nodata = 0, 
+#                            dtype = rasterio.int16) as img_towrite:
+#             
+#             img_towrite.write(self.partition_extent, 1)
+#         self.logger.experiment.log_artifact(run_id = self.logger.run_id, local_path = tmp_output_file, artifact_path = 'extent_binary')
         
     def _load_env_list(self, stage_date_list, stage_env_list, stage_species_list):
         # env
@@ -303,8 +303,8 @@ class LitDeepSDMData(pl.LightningDataModule):
 
         ##########################################################
         
-        if self.trainer.global_rank == 0:
-            self._save_trainval_split(self.dataset_train)
+#         if self.trainer.global_rank == 0:
+#             self._save_trainval_split(self.dataset_train)
             
         self.trainer.strategy.barrier()
         
