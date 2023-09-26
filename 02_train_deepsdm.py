@@ -9,7 +9,7 @@ from LitUNetSDM import LitUNetSDM
 import yaml
 
 # load configurations
-yaml_conf = './DeepSDM_conf_toy.yaml'
+yaml_conf = './DeepSDM_conf.yaml'
 with open(yaml_conf, 'r') as f:
     DeepSDM_conf = yaml.load(f, Loader = yaml.FullLoader)
 DeepSDM_conf = SimpleNamespace(**DeepSDM_conf)
@@ -20,7 +20,7 @@ timelog = time.strftime('%Y%m%d%H%M%S', time.localtime())
 ### LOGGER
 # Use mlflow to auto logging pytorch lightning everything
 # mlflow.set_experiment(conf.experiment_name)
-mlflow.pytorch.autolog(disable = True)
+# mlflow.pytorch.autolog(disable = True)
 
 ### DATA
 # initialize the lightning data module
