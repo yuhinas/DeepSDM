@@ -14,12 +14,13 @@ import yaml
 from types import SimpleNamespace
 
 class LitDeepSDMData(pl.LightningDataModule):
-    def __init__ (self, yaml_conf = './DeepSDM_conf.yaml'):
+    def __init__ (self, yaml_conf = './DeepSDM_conf.yaml', tmp_path = './tmp'):
         
         super().__init__()
-
-        if not os.path.isdir(f'./tmp'):
-            os.makedirs(f'./tmp')
+        
+        self.tmp_path = tmp_path
+        if not os.path.isdir(tmp_path):
+            os.makedirs(tmp_path)
         
         geo_extent_file = './workspace/extent_binary.tif'
         meta_json_files = {
@@ -119,10 +120,10 @@ class LitDeepSDMData(pl.LightningDataModule):
         return embedding
             
     def _load_meta_list(self, stage_date_list, stage_env_list, stage_species_list, stage):
-        torch.save(self._load_env_list(stage_date_list, stage_env_list, stage_species_list), f'./tmp/env_stack_{stage}.pth')
-        torch.save(self._load_embedding_list(stage_date_list, stage_env_list, stage_species_list), f'./tmp/embedding_{stage}.pth')
-        torch.save(self._load_label_list(stage_date_list, stage_env_list, stage_species_list), f'./tmp/label_stack_{stage}.pth')
-        torch.save(self._load_k2_list(stage_date_list, stage_env_list, stage_species_list), f'./tmp/k2_stack_{stage}.pth')
+        torch.save(self._load_env_list(stage_date_list, stage_env_list, stage_species_list), f'{self.tmp_path}/env_stack_{stage}.pth')
+        torch.save(self._load_embedding_list(stage_date_list, stage_env_list, stage_species_list), f'{self.tmp_path}/embedding_{stage}.pth')
+        torch.save(self._load_label_list(stage_date_list, stage_env_list, stage_species_list), f'{self.tmp_path}/label_stack_{stage}.pth')
+        torch.save(self._load_k2_list(stage_date_list, stage_env_list, stage_species_list), f'{self.tmp_path}/k2_stack_{stage}.pth')
 
     def prepare_data(self):
         
@@ -132,7 +133,7 @@ class LitDeepSDMData(pl.LightningDataModule):
         file_missing = False
         for prefix_ in ['env_stack', 'embedding', 'label_stack', 'k2_stack']:
             for stage_ in ['train', 'val', 'smoothviz']:
-                if not os.path.exists(f'./tmp/{prefix_}_{stage_}.pth'):
+                if not os.path.exists(f'{self.tmp_path}/{prefix_}_{stage_}.pth'):
                     file_missing = True
                 if file_missing:
                     break
@@ -189,10 +190,10 @@ class LitDeepSDMData(pl.LightningDataModule):
         ###
         torch.cuda.synchronize()
         start_time = time.time()
-        self.env_stack_train = torch.load('./tmp/env_stack_train.pth', map_location='cpu')
-        self.embedding_train = torch.load('./tmp/embedding_train.pth', map_location='cpu')
-        self.label_stack_train = torch.load('./tmp/label_stack_train.pth', map_location='cpu')
-        self.k2_stack_train = torch.load('./tmp/k2_stack_train.pth', map_location='cpu')
+        self.env_stack_train = torch.load(f'{self.tmp_path}/env_stack_train.pth', map_location='cpu')
+        self.embedding_train = torch.load(f'{self.tmp_path}/embedding_train.pth', map_location='cpu')
+        self.label_stack_train = torch.load(f'{self.tmp_path}/label_stack_train.pth', map_location='cpu')
+        self.k2_stack_train = torch.load(f'{self.tmp_path}/k2_stack_train.pth', map_location='cpu')
         print(f'train ############################################## {self.trainer.global_rank}')
         if self.trainer.global_rank == 0:
             dataset_train = TaxaDataset(
@@ -212,14 +213,14 @@ class LitDeepSDMData(pl.LightningDataModule):
         ###
         torch.cuda.synchronize()
         start_time = time.time()
-        self.label_stack_val = torch.load('./tmp/label_stack_val.pth', map_location='cpu')
+        self.label_stack_val = torch.load(f'{self.tmp_path}/label_stack_val.pth', map_location='cpu')
         print(f'val ############################################## {self.trainer.global_rank}')
         if self.trainer.global_rank == 0:
             dataset_val = TaxaDataset(
-                torch.load('./tmp/env_stack_val.pth', map_location='cpu'), 
-                torch.load('./tmp/embedding_val.pth', map_location='cpu'), 
+                torch.load(f'{self.tmp_path}/env_stack_val.pth', map_location='cpu'), 
+                torch.load(f'{self.tmp_path}/embedding_val.pth', map_location='cpu'), 
                 self.label_stack_val, 
-                torch.load('./tmp/k2_stack_val.pth', map_location='cpu'), 'val', self.DeepSDM_conf, self.trainer.global_rank
+                torch.load(f'{self.tmp_path}/k2_stack_val.pth', map_location='cpu'), 'val', self.DeepSDM_conf, self.trainer.global_rank
             )
         else:
             dataset_val = None
@@ -250,10 +251,10 @@ class LitDeepSDMData(pl.LightningDataModule):
         ##########################################################        
         torch.cuda.synchronize()
         start_time = time.time()
-        self.env_stack_smoothviz = torch.load('./tmp/env_stack_smoothviz.pth', map_location='cpu')
-        self.embedding_smoothviz = torch.load('./tmp/embedding_smoothviz.pth', map_location='cpu')
-        self.label_stack_smoothviz = torch.load('./tmp/label_stack_smoothviz.pth', map_location='cpu')
-        self.k2_stack_smoothviz = torch.load('./tmp/k2_stack_smoothviz.pth', map_location='cpu')
+        self.env_stack_smoothviz = torch.load(f'{self.tmp_path}/env_stack_smoothviz.pth', map_location='cpu')
+        self.embedding_smoothviz = torch.load(f'{self.tmp_path}/embedding_smoothviz.pth', map_location='cpu')
+        self.label_stack_smoothviz = torch.load(f'{self.tmp_path}/label_stack_smoothviz.pth', map_location='cpu')
+        self.k2_stack_smoothviz = torch.load(f'{self.tmp_path}/k2_stack_smoothviz.pth', map_location='cpu')
         
         if self.trainer.global_rank == 0:
             self.datasets_smoothviz = []
@@ -307,10 +308,10 @@ class LitDeepSDMData(pl.LightningDataModule):
             'predict',
         )
 
-        self.env_stack_predict = torch.load('./tmp/env_stack_predict.pth', map_location='cpu')
-        self.embedding_predict = torch.load('./tmp/embedding_predict.pth', map_location='cpu')
-        self.label_stack_predict = torch.load('./tmp/label_stack_predict.pth', map_location='cpu')
-        self.k2_stack_predict = torch.load('./tmp/k2_stack_predict.pth', map_location='cpu')
+        self.env_stack_predict = torch.load(f'{self.tmp_path}/env_stack_predict.pth', map_location='cpu')
+        self.embedding_predict = torch.load(f'{self.tmp_path}/embedding_predict.pth', map_location='cpu')
+        self.label_stack_predict = torch.load(f'{self.tmp_path}/label_stack_predict.pth', map_location='cpu')
+        self.k2_stack_predict = torch.load(f'{self.tmp_path}/k2_stack_predict.pth', map_location='cpu')
         
         self.datasets_predict = []
         print ("Setting up dataset for prediction...")

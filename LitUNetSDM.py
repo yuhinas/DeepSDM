@@ -16,8 +16,11 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 
 
 class LitUNetSDM(pl.LightningModule):
-    def __init__(self, yaml_conf = './DeepSDM_conf.yaml'):
+    def __init__(self, yaml_conf = './DeepSDM_conf.yaml', tmp_path = './tmp'):
+        
         super().__init__()
+        
+        self.tmp_path = tmp_path
         
         with open(yaml_conf, 'r') as f:
             DeepSDM_conf = SimpleNamespace(**yaml.load(f, Loader = yaml.FullLoader))
@@ -607,7 +610,7 @@ class LitUNetSDM(pl.LightningModule):
     
     def on_fit_start(self):
         if self.trainer.global_rank == 0:
-            self.tmp_path = f'./tmp/{self.training_conf.experiment_name}'
+            self.tmp_path = f'{self.tmp_path}/{self.training_conf.experiment_name}'
             if not os.path.isdir(self.tmp_path):
                 os.makedirs(self.tmp_path)
             self.save_trainval_split()
@@ -636,6 +639,7 @@ class LitUNetSDM(pl.LightningModule):
                         else:
                             for key in state_dict:
                                 mean_state_dict[key] = mean_state_dict[key] + state_dict[key]
+                    print(f'there are {len(cb.best_k_models.items())} models.')
                     for key in mean_state_dict:
                         mean_state_dict[key] = mean_state_dict[key] / len(cb.best_k_models.items())
         
