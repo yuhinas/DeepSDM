@@ -21,6 +21,7 @@ class LitUNetSDM(pl.LightningModule):
         super().__init__()
         
         self.tmp_path = tmp_path
+        self.yaml_conf = yaml_conf
         
         with open(yaml_conf, 'r') as f:
             DeepSDM_conf = SimpleNamespace(**yaml.load(f, Loader = yaml.FullLoader))
@@ -630,23 +631,30 @@ class LitUNetSDM(pl.LightningModule):
         if self.trainer.global_rank == 0:
             for cb in self.trainer.callbacks:
                 if isinstance(cb, ModelCheckpoint):
-                    mean_state_dict = None
+                    top_k_avg_state_dict = None
                     for model_path, monitered_value in cb.best_k_models.items():
                         
                         state_dict = torch.load(model_path)['state_dict']
-                        if mean_state_dict is None:
-                            mean_state_dict = state_dict
+                        if top_k_avg_state_dict is None:
+                            top_k_avg_state_dict = state_dict
                         else:
                             for key in state_dict:
-                                mean_state_dict[key] = mean_state_dict[key] + state_dict[key]
+                                top_k_avg_state_dict[key] = top_k_avg_state_dict[key] + state_dict[key]
                     print(f'there are {len(cb.best_k_models.items())} models.')
-                    for key in mean_state_dict:
-                        mean_state_dict[key] = mean_state_dict[key] / len(cb.best_k_models.items())
+                    for key in top_k_avg_state_dict:
+                        top_k_avg_state_dict[key] = top_k_avg_state_dict[key] / len(cb.best_k_models.items())
         
-                    torch.save(mean_state_dict, f'{self.tmp_path}/top_k_avg_state_dict.pt')
+                    torch.save(top_k_avg_state_dict, f'{self.tmp_path}/top_k_avg_state_dict.pt')
                     self.logger.experiment.log_artifact(run_id = self.logger.run_id, 
                                                         local_path = f'{self.tmp_path}/top_k_avg_state_dict.pt', 
                                                         artifact_path = 'top_k_avg_state_dict')
+                
+                    top_k_avg_model = LitUNetSDM(yaml_conf=self.yaml_conf, tmp_path=self.tmp_path)
+                    top_k_avg_model.load_state_dict(top_k_avg_state_dict)
+
+                    with mlflow.start_run(self.logger.run_id) as run:
+                        mlflow.pytorch.log_model(top_k_avg_model, 'top_k_avg_model')
+                    # print()
      
     
     
