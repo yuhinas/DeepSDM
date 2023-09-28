@@ -21,10 +21,12 @@ class RasterHelper:
         self.species_list = None
         
         self.no_data = -9999
-
+        
         if not os.path.exists('./workspace'):
             os.makedirs('./workspace')
         
+        # new extent_binary which based on all environmental layers extent
+        self.extent_binary_intersection = None
         
     def res_rounder(self, a, second_round=None):
         if second_round is None:
@@ -163,6 +165,11 @@ class RasterHelper:
         dst_tif = None
 
         
+        # intersect envrionmental layer's extent 
+        self.intersect_extents(medium_env_tif)
+        
+        
+        
     def raw_to_medium_agg_(self, doy_to_month_tifs):
         
         raw_env_tifs = []
@@ -203,6 +210,7 @@ class RasterHelper:
             
             mem_raster_arrs.append(mem_tif.GetRasterBand(1).ReadAsArray())
             mem_tif = None
+
         
         mem_raster_arr_avg = np.nanmean(np.stack(mem_raster_arrs), axis=0)
         
@@ -226,6 +234,9 @@ class RasterHelper:
         src_tif = None
         dst_driver  = None
         dst_tif = None
+        
+        # intersect envrionmental layer's extent 
+        self.intersect_extents(medium_env_tifs[0])
         
         
     def build_env_(self, env, conf):
@@ -368,14 +379,47 @@ class RasterHelper:
                 self.env_medium_list[env][y_m] = self.doy_to_month_tifs[y_m][0]['medium'] #f'{full_out_path}/{env_out}'
 
         self.env_medium_list[env] = dict(sorted(self.env_medium_list[env].items()))
-
+        
+        
     def raw_to_medium(self, env_raw_conf):
         self.env_medium_list = {}
         for env in env_raw_conf:
             for conf in env_raw_conf[env]:
                 print(conf)
-                self.build_env_(env, conf)        
-        
+                self.build_env_(env, conf)
+                
+        # after all the env layers been read
+        # start processing about the extent_binary_intersect 
+        def floodfill(extent_binary_intersect):
+            extent_binary_intersect_ = extent_binary_intersect.astype(np.uint8)*255
+            mask = np.zeros((extent_binary_intersect_.shape[0]+2, extent_binary_intersect_.shape[1]+2), np.uint8)
+            cv2.floodFill(extent_binary_intersect_, mask, (0,0), 255)
+            extent_binary_intersect_inv = cv2.bitwise_not(extent_binary_intersect_)
+            extent_binary_intersect_out = extent_binary_intersect.astype(np.uint8) * 255 | extent_binary_intersect_inv
+            
+            dst = gdal.Open('./workspace/extent_binary.tif', gdalconst.GA_ReadOnly)
+            dst_transform = dst.GetGeoTransform()
+            dst_projection = dst.GetProjection()
+            dst_X = dst.RasterXSize
+            dst_Y = dst.RasterYSize
+            dst = None
+            
+            dst_driver= gdal.GetDriverByName('GTiff')
+            dst_tif = dst_driver.Create('./workspace/extent_binary.tif', 
+                      dst_X, 
+                      dst_Y, 
+                      1, 
+                      gdalconst.GDT_Int32)
+
+            dst_tif.SetGeoTransform(dst_transform)
+            dst_tif.SetProjection(dst_projection)
+            dst_tif.GetRasterBand(1).WriteArray(np.sign(extent_binary_intersect_out).astype('int'))
+            dst_tif.GetRasterBand(1).SetNoDataValue(self.no_data)
+            
+            dst_driver = None
+            dst_tif = None
+            
+        floodfill(self.extent_binary_intersection)
         
     def random_split_train_val(self, train_ratio=0.7):
         spatial_conf = self.spatial_conf
@@ -493,6 +537,7 @@ class RasterHelper:
                 
                 # fill in the missing cells with cell avg
                 env_arr_span_avg = np.where((mask==1)&(env_arr_span_avg==self.no_data), env_cell_avg, env_arr_span_avg)
+                env_arr_span_avg = np.where((mask==1), env_arr_span_avg, self.no_data)
 
                 with rasterio.open(
                     os.path.join(path_name), 
@@ -687,6 +732,7 @@ class RasterHelper:
                 self.build_env_CCI_(env, conf) 
         if conf['PCA'] != None:
             self.CCI_PCA(CCI_conf)
+            
     def build_env_CCI_(self, env, conf):
         pattern = conf['filename_template'].replace('[YEAR]', r'(?P<year>\d{4})') + '$'
         # Convert template to regex pattern
@@ -835,3 +881,10 @@ class RasterHelper:
                     if f'landcover_PC{pc:02d}' not in self.env_medium_list:
                         self.env_medium_list[f'landcover_PC{pc:02d}'] = {}
                     self.env_medium_list[f'landcover_PC{pc:02d}'][f'{year:04d}-{month:02d}'] = os.path.join(medium_env_dir, f'landcover_PC{pc:02d}', f'landcover_PC{pc:02d}_{year:04d}.tif')
+                    
+    def intersect_extents(self, tif):
+        dst = gdal.Open(tif, gdalconst.GA_ReadOnly)
+        if self.extent_binary_intersection is None:
+            self.extent_binary_intersection = np.full((dst.RasterYSize, dst.RasterXSize), True)
+        self.extent_binary_intersection = np.logical_and(~(dst.GetRasterBand(1).ReadAsArray() == dst.GetRasterBand(1).GetNoDataValue()), self.extent_binary_intersection)
+        dst = None
