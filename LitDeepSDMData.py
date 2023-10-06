@@ -14,21 +14,22 @@ import yaml
 from types import SimpleNamespace
 
 class LitDeepSDMData(pl.LightningDataModule):
-    def __init__ (self, yaml_conf = './DeepSDM_conf.yaml', tmp_path = './tmp'):
+    def __init__ (self, 
+                  yaml_conf = './DeepSDM_conf.yaml', 
+                  tmp_path = './tmp'):
         
         super().__init__()
         
         self.tmp_path = tmp_path
         if not os.path.isdir(tmp_path):
             os.makedirs(tmp_path)
+
+        with open(yaml_conf, 'r') as f:
+            DeepSDM_conf = yaml.load(f, Loader = yaml.FullLoader)
+        DeepSDM_conf = SimpleNamespace(**DeepSDM_conf)
         
-        geo_extent_file = './workspace/extent_binary.tif'
-        meta_json_files = {
-            'env_inf': './workspace/env_information.json',
-            'sp_inf': './workspace/species_information.json',
-            'k_inf': './workspace/k_information.json',
-            'co_vec': './workspace/cooccurrence_vector.json',
-        }
+        geo_extent_file = DeepSDM_conf.geo_extent_file
+        meta_json_files = DeepSDM_conf.meta_json_files # {'env_inf': './workspace/env_information.json', 'sp_inf': './workspace/species_information.json', 'k_inf': './workspace/k_information.json', 'co_vec': './workspace/cooccurrence_vector.json'}
         
         # define self.env_inf, self.sp_inf, self.co_vec
         for item_ in meta_json_files.items():
@@ -40,10 +41,6 @@ class LitDeepSDMData(pl.LightningDataModule):
             self.geo_extent = ToTensor()(f.read(1))
             self.geo_transform = f.transform
             self.geo_crs = f.crs
-        
-        with open(yaml_conf, 'r') as f:
-            DeepSDM_conf = yaml.load(f, Loader = yaml.FullLoader)
-        DeepSDM_conf = SimpleNamespace(**DeepSDM_conf)
         
         self.DeepSDM_conf = DeepSDM_conf
         self.training_conf = SimpleNamespace(**DeepSDM_conf.training_conf)

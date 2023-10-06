@@ -1,23 +1,12 @@
-CCI_conf:
-  landcover:
-  - PCA: 0.9
-    env_out_template: landcover_[CLASS]/landcover_[CLASS]_[YEAR].tif
-    filename_template: ESACCI-LC-L4-LCCS-Map-300m-P1Y-[YEAR]-v2.0.7cds.nc
-    layer_name: lccs_class
-    raw_env_dir: /work/klok0126/landcover
-    unique_class: [10, 11, 12, 20, 30, 40, 50, 60, 61, 62, 70, 71, 72, 80, 81, 82, 90, 100, 110, 120, 121, 122, 130, 140, 150, 151, 152, 153, 160, 170, 180, 190, 200, 201, 202, 210, 220]
-    year_coverages:
-    - 2000
-    - 2015
-  - PCA: 0.9
-    env_out_template: landcover_[CLASS]/landcover_[CLASS]_[YEAR].tif
-    filename_template: C3S-LC-L4-LCCS-Map-300m-P1Y-[YEAR]-v2.1.1.nc
-    layer_name: lccs_class
-    raw_env_dir: /work/klok0126/landcover
-    unique_class: [10, 11, 12, 20, 30, 40, 50, 60, 61, 62, 70, 71, 72, 80, 81, 82, 90, 100, 110, 120, 121, 122, 130, 140, 150, 151, 152, 153, 160, 170, 180, 190, 200, 201, 202, 210, 220]
-    year_coverages:
-    - 2016
-    - 2020
+# which configuration jsons will be used
+geo_extent_file: ./workspace/extent_binary.tif
+meta_json_files:
+  env_inf: ./workspace/env_information.json
+  sp_inf: ./workspace/species_information.json
+  k_inf: ./workspace/k_information.json
+  co_vec: ./workspace/cooccurrence_vector.json
+  
+# training configurations
 training_conf:
   batch_size: 300
   epochs: 300
@@ -51,6 +40,8 @@ training_conf:
   - '2018-11-01'
   - '2018-12-01'  
   species_list_predict: ['Passer_cinnamomeus', 'Carpodacus_formosanus', 'Acridotheres_cristatellus', 'Nisaetus_nipalensis', 'Corvus_macrorhynchos', 'Pycnonotus_taivanus', 'Glaucidium_brodiei', 'Psilopogon_nuchalis', 'Treron_sieboldii', 'Lonchura_atricapilla', 'Prunella_collaris', 'Hirundapus_cochinchinensis', 'Alauda_gulgula', 'Pycnonotus_sinensis', 'Suthora_verreauxi', 'Garrulax_ruficeps', 'Centropus_bengalensis', 'Treron_formosae', 'Otus_lettia', 'Enicurus_scouleri', 'Spizixos_semitorques', 'Ketupa_flavipes', 'Garrulax_taewanus', 'Motacilla_alba', 'Sitta_europaea', 'Tarsiger_johnstoniae', 'Poecile_varius', 'Elanus_caeruleus', 'Alcippe_morrisonia', 'Oriolus_traillii', 'Ardea_purpurea', 'Phasianus_colchicus', 'Horornis_acanthizoides', 'Strix_nivicolum', 'Lophura_swinhoii', 'Delichon_dasypus', 'Lonchura_striata', 'Yuhina_brunneiceps', 'Myophonus_insularis', 'Periparus_ater', 'Zosterops_simplex', 'Syrmaticus_mikado', 'Prinia_flaviventris']
+  species_list_resident: ['Abroscopus_albogularis', 'Accipiter_trivirgatus', 'Accipiter_virgatus', 'Acridotheres_cristatellus', 
+'Actinodura_morrisoniana', 'Aegithalos_concinnus', 'Aix_galericulata', 'Alauda_gulgula', 'Alcedo_atthis', 'Alcippe_morrisonia', 'Amaurornis_phoenicurus', 'Anas_poecilorhyncha', 'Apus_nipalensis', 'Arborophila_crudigularis', 'Ardea_alba', 'Ardea_purpurea', 'Bambusicola_sonorivox', 'Brachypteryx_goodfellowi', 'Bubulcus_ibis', 'Butorides_striata', 'Caprimulgus_affinis', 'Carpodacus_formosanus', 'Cecropis_striolata', 'Centropus_bengalensis', 'Chalcophaps_indica', 'Charadrius_alexandrinus', 'Charadrius_dubius', 'Cinclus_pallasii', 'Cisticola_exilis', 'Cisticola_juncidis', 'Columba_pulchricollis', 'Coracina_macei', 'Corvus_macrorhynchos', 'Stachyridopsis_ruficeps', 'Delichon_dasypus', 'Dendrocitta_formosae', 'Dendrocopos_leucotos', 'Dicaeum_ignipectus', 'Dicaeum_minullum', 'Dicrurus_aeneus', 'Dicrurus_macrocercus', 'Egretta_garzetta', 'Egretta_sacra', 'Elanus_caeruleus', 'Enicurus_scouleri', 'Erpornis_zantholeuca', 'Pomatorhinus_erythrocnemis', 'Falco_peregrinus', 'Ficedula_hyperythra', 'Fulvetta_formosana', 'Gallicrex_cinerea', 'Gallinula_chloropus', 'Garrulax_taewanus', 'Garrulus_glandarius', 'Gorsachius_melanolophus', 'Heterophasia_auricularis', 'Himantopus_himantopus', 'Hirundapus_cochinchinensis', 'Hirundo_tahitica', 'Horornis_acanthizoides', 'Horornis_fortipes', 'Hydrophasianus_chirurgus', 'Hypothymis_azurea', 'Hypsipetes_amaurotis', 'Hypsipetes_leucocephalus', 'Ictinaetus_malayensis', 'Ixobrychus_cinnamomeus', 'Ixobrychus_sinensis', 'Ketupa_flavipes', 'Lanius_schach', 'Gallirallus_striatus', 'Liocichla_steerii', 'Locustella_alishanensis', 'Lonchura_atricapilla', 'Lonchura_punctulata', 'Lonchura_striata', 'Lophura_swinhoii', 'Parus_holsti', 'Macropygia_tenuirostris', 'Milvus_migrans', 'Monticola_solitarius', 'Motacilla_alba', 'Myiomela_leucura', 'Myophonus_insularis', 'Niltava_vivida', 'Ninox_japonica', 'Nisaetus_nipalensis', 'Nucifraga_caryocatactes', 'Nycticorax_nycticorax', 'Oriolus_chinensis', 'Oriolus_traillii', 'Otus_elegans', 'Otus_lettia', 'Otus_spilocephalus', 'Parus_monticolus', 'Passer_cinnamomeus', 'Passer_montanus', 'Pericrocotus_solaris', 'Periparus_ater', 'Pernis_ptilorhynchus', 'Phasianus_colchicus', 'Phoenicurus_fuliginosus', 'Picus_canus', 'Pnoepyga_formosana', 'Pomatorhinus_musicus', 'Prinia_flaviventris', 'Prinia_inornata', 'Prinia_striata', 'Prunella_collaris', 'Psilopogon_nuchalis', 'Garrulax_poecilorhynchus', 'Garrulax_ruficeps', 'Pycnonotus_sinensis', 'Pycnonotus_taivanus', 'Pyrrhula_nipalensis', 'Pyrrhula_owstoni', 'Rallina_eurizonoides', 'Regulus_goodfellowi', 'Riparia_chinensis', 'Rostratula_benghalensis', 'Alcippe_brunnea', 'Sinosuthora_webbiana', 'Sitta_europaea', 'Poecile_varius', 'Spilopelia_chinensis', 'Spilornis_cheela', 'Spizixos_semitorques', 'Sternula_albifrons', 'Streptopelia_orientalis', 'Streptopelia_tranquebarica', 'Strix_leptogrammica', 'Strix_nivicolum', 'Suthora_verreauxi', 'Coturnix_chinensis', 'Syrmaticus_mikado', 'Tachybaptus_ruficollis', 'Glaucidium_brodiei', 'Tarsiger_indicus', 'Tarsiger_johnstoniae', 'Terpsiphone_atrocaudata', 'Treron_formosae', 'Treron_sieboldii', 'Trochalopteron_morrisonianum', 'Troglodytes_troglodytes', 'Turdus_mandarinus', 'Turdus_poliocephalus', 'Turnix_suscitator', 'Turnix_sylvaticus', 'Tyto_longimembris', 'Urocissa_caerulea', 'Yuhina_brunneiceps', 'Yungipicus_canicapillus', 'Porzana_fusca', 'Zoothera_dauma', 'Zosterops_japonicus', 'Zosterops_meyeni', 'Zosterops_simplex']
   date_list_smoothviz:
   - '2018-01-01'
   - '2018-04-01'
@@ -61,21 +52,47 @@ training_conf:
   - Yuhina_brunneiceps
   - Corvus_macrorhynchos
   - Syrmaticus_mikado
-cooccurrence_conf:
-  cooccurrence_day_mul: 1
-  cooccurrence_xy_mul: 1
-  sp_filter_from: ./workspace/species_data/occurrence_data/species_occurrence_filter.csv
+
+# configurations of pytorch lightning and model checkpoints
 earlystopping_conf:
   min_delta: 0.0
   mode: max
   monitor: f1_train
   patience: 50
   verbose: true
-embedding_conf:
-  batch_size: 1000
-  epochs: 2000
-  num_neg: 10
-  num_vector: 64
+model_checkpoint_conf:
+  mode: max
+  monitor: f1_train
+  save_last: true
+  save_top_k: 3
+  verbose: true
+trainer_conf:
+  accelerator: gpu
+  check_val_every_n_epoch: 1
+  devices: 4
+  precision: 32
+
+# spatial and temporal configurations
+spatial_conf_tmp:
+  grid_size: 112
+  num_of_grid_x: 3
+  num_of_grid_y: 5
+  out_res: 0.00625
+  x_start: 119.95
+  y_start: 21.85
+temporal_conf:
+  cooccurrence_day_limit: 14
+  date_end: '2018-12-31'
+  date_start: '2000-01-01'
+  month_span: 3
+  month_step: 1
+
+# data preparation configurations
+file_make_extent: /work/klok0126/Chelsa/cmi_/CHELSA_cmi_09_2017_V.2.1.tif
+gbif_occurrence_csv: /home/klok0126/DeepSDM/raw/species_occurrence_raw_all.csv
+
+# environmental factors configurations
+# normal environmental factors
 env_raw_conf:
   EVI:
   - env_out_template: EVI_[YEAR]_[MONTH].tif
@@ -129,29 +146,38 @@ env_raw_conf:
   - env_out_template: vpd_[YEAR]_[MONTH].tif
     filename_template: CHELSA_vpd_[MONTH]_[YEAR]_V.2.1.tif
     raw_env_dir: /work/klok0126/Chelsa/vpd_
-file_make_extent: /work/klok0126/Chelsa/cmi_/CHELSA_cmi_09_2017_V.2.1.tif
-gbif_occurrence_csv: /home/klok0126/DeepSDM/raw/species_occurrence_raw_all.csv
-model_checkpoint_conf:
-  mode: max
-  monitor: f1_train
-  save_last: true
-  save_top_k: 3
-  verbose: true
-spatial_conf_tmp:
-  grid_size: 112
-  num_of_grid_x: 3
-  num_of_grid_y: 5
-  out_res: 0.00625
-  x_start: 119.95
-  y_start: 21.85
-temporal_conf:
-  cooccurrence_day_limit: 14
-  date_end: '2018-12-31'
-  date_start: '2000-01-01'
-  month_span: 3
-  month_step: 1
-trainer_conf:
-  accelerator: gpu
-  check_val_every_n_epoch: 1
-  devices: 4
-  precision: 32
+    
+# specific configurations of CCI landcover
+CCI_conf:
+  landcover:
+  - PCA: 0.9
+    env_out_template: landcover_[CLASS]/landcover_[CLASS]_[YEAR].tif
+    filename_template: ESACCI-LC-L4-LCCS-Map-300m-P1Y-[YEAR]-v2.0.7cds.nc
+    layer_name: lccs_class
+    raw_env_dir: /work/klok0126/landcover
+    unique_class: [10, 11, 12, 20, 30, 40, 50, 60, 61, 62, 70, 71, 72, 80, 81, 82, 90, 100, 110, 120, 121, 122, 130, 140, 150, 151, 152, 153, 160, 170, 180, 190, 200, 201, 202, 210, 220]
+    year_coverages:
+    - 2000
+    - 2015
+  - PCA: 0.9
+    env_out_template: landcover_[CLASS]/landcover_[CLASS]_[YEAR].tif
+    filename_template: C3S-LC-L4-LCCS-Map-300m-P1Y-[YEAR]-v2.1.1.nc
+    layer_name: lccs_class
+    raw_env_dir: /work/klok0126/landcover
+    unique_class: [10, 11, 12, 20, 30, 40, 50, 60, 61, 62, 70, 71, 72, 80, 81, 82, 90, 100, 110, 120, 121, 122, 130, 140, 150, 151, 152, 153, 160, 170, 180, 190, 200, 201, 202, 210, 220]
+    year_coverages:
+    - 2016
+    - 2020
+
+# configurations of counting co-occurrence 
+cooccurrence_conf:
+  cooccurrence_day_mul: 1
+  cooccurrence_xy_mul: 1
+  sp_filter_from: ./workspace/species_data/occurrence_data/species_occurrence_filter.csv
+
+# configurations of embeddings
+embedding_conf:
+  batch_size: 1000
+  epochs: 2000
+  num_neg: 10
+  num_vector: 64
