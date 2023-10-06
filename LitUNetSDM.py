@@ -16,7 +16,11 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 
 
 class LitUNetSDM(pl.LightningModule):
-    def __init__(self, yaml_conf = './DeepSDM_conf.yaml', tmp_path = './tmp'):
+    def __init__(self, 
+                 yaml_conf = './DeepSDM_conf.yaml', 
+                 tmp_path = './tmp', 
+                 predict_attention = False  # whether to plot attention score map while predicting results
+                ):
         
         super().__init__()
         
@@ -36,6 +40,9 @@ class LitUNetSDM(pl.LightningModule):
 
         self._init_val_step_vars()
         self._init_train_step_vars()
+        
+        self.no_data = -9999
+        self.predict_attention = predict_attention
         
     def forward(self, env_image, bio_vector):
         return self.model(env_image, bio_vector)
@@ -68,7 +75,7 @@ class LitUNetSDM(pl.LightningModule):
         labels = labels.reshape(-1, *labels.shape[-3:])
         k2 = k2.reshape(-1, *k2.shape[-3:])
 
-        image_output = self.model(inputs, embeddings)
+        image_output, A = self.model(inputs, embeddings)
     
         ################## effort weighted bce loss
         
@@ -393,7 +400,8 @@ class LitUNetSDM(pl.LightningModule):
             torch.cuda.synchronize()
             start_time = time.time()            
             for inputs, embeddings, (height_start, height_end, width_start, width_end), species_date in dataloader_smoothviz:
-                outputs = torch.sigmoid(self.model(inputs.to(self.device), embeddings.to(self.device)))
+                outputs, A = self.model(inputs.to(self.device), embeddings.to(self.device))
+                outputs = torch.sigmoid(outputs)
                 for i in range(len(species_date)):
                     result[height_start[i]:height_end[i], width_start[i]:width_end[i]] += outputs[i, 0, :, :]
                     counts[height_start[i]:height_end[i], width_start[i]:width_end[i]] += 1
@@ -506,7 +514,7 @@ class LitUNetSDM(pl.LightningModule):
         if not os.path.isdir(dir_out):
             os.makedirs(dir_out)
         with open(f'{output_dir}/DeepSDM_conf.yaml', 'w') as f:
-            yaml.dump(self.DeepSDM_conf, f)
+            yaml.dump(vars(self.DeepSDM_conf), f)
         
         dir_tif_out = f'{output_dir}/tif'
         if not os.path.isdir(dir_tif_out):
@@ -515,6 +523,11 @@ class LitUNetSDM(pl.LightningModule):
         dir_png_out = f'{output_dir}/png'
         if not os.path.isdir(dir_png_out):
             os.makedirs(dir_png_out)
+            
+        if self.predict_attention:
+            dir_attention_out = f'{output_dir}/attention'
+            if not os.path.isdir(dir_attention_out):
+                os.makedirs(dir_attention_out)
 
         nan_tensor = torch.tensor(float('nan'), device=self.device)
         extent = datamodule.geo_extent[0].to(self.device) #1是預測範圍;0是非預測範圍
@@ -551,11 +564,32 @@ class LitUNetSDM(pl.LightningModule):
 
             result = torch.zeros(height_new, width_new, device=self.device) # 放大後的尺寸
             counts = torch.zeros(height_new, width_new, device=self.device, dtype=torch.int32)
-
+            
+            # tensor to load attention score
+            attention = None
+            
             torch.cuda.synchronize()
             start_time = time.time()            
             for inputs, embeddings, (height_start, height_end, width_start, width_end), species_date in dataloader_predict:
-                outputs = torch.sigmoid(self.model(inputs.to(self.device), embeddings.to(self.device)))
+                outputs, A = self.model(inputs.to(self.device), embeddings.to(self.device))
+                outputs = torch.sigmoid(outputs)
+                
+                # concatenate attention scores
+                if self.predict_attention:
+                    if attention is None:
+                        attention = torch.cat((A, 
+                                               height_start[:, None].to(self.device), 
+                                               width_start[:, None].to(self.device), 
+                                               height_end[:, None].to(self.device), 
+                                               width_end[:, None].to(self.device)), axis = 1)
+                    else:
+                        attention = torch.cat((attention, 
+                                               torch.cat((A, 
+                                                          height_start[:, None].to(self.device), 
+                                                          width_start[:, None].to(self.device), 
+                                                          height_end[:, None].to(self.device), 
+                                                          width_end[:, None].to(self.device)), axis = 1)), axis = 0)
+                
                 for i in range(len(species_date)):
                     result[height_start[i]:height_end[i], width_start[i]:width_end[i]] += outputs[i, 0, :, :]
                     counts[height_start[i]:height_end[i], width_start[i]:width_end[i]] += 1
@@ -588,6 +622,39 @@ class LitUNetSDM(pl.LightningModule):
 
             date_ = species_date[0].split('_')[-1:][0]
             sp_ = '_'.join(species_date[0].split('_')[:-1])
+            
+            
+            # save the logged attention score as map
+            if self.predict_attention:
+                height_start = attention[:, -4].to(torch.int16)
+                width_start = attention[:, -3].to(torch.int16)
+                height_end = attention[:, -2].to(torch.int16)
+                width_end = attention[:, -1].to(torch.int16)
+                for i_env in range(len(self.training_conf.env_list)):
+                    attention_map = torch.zeros(height_new, width_new, device = self.device) # 放大後的尺寸
+                    counts_map = torch.zeros(height_new, width_new, device = self.device, dtype=torch.int16)
+                    for i_attention in range(len(attention)):
+                        attention_map[height_start[i_attention]:height_end[i_attention], width_start[i_attention]:width_end[i_attention]] = attention_map[height_start[i_attention]:height_end[i_attention], width_start[i_attention]:width_end[i_attention]] + attention[i_attention, i_env]
+                        counts_map[height_start[i_attention]:height_end[i_attention], width_start[i_attention]:width_end[i_attention]] = counts_map[height_start[i_attention]:height_end[i_attention], width_start[i_attention]:width_end[i_attention]] + 1
+#                 torch.save(attention, f"{dir_attention_out}/{sp_}_{date_}_attention.pt")
+                    counts_map = torch.where(counts_map == 0, 1, counts_map)
+                    attention_map = attention_map / counts_map
+                    attention_map = attention_map[subsample_height:(subsample_height + height_original), 
+                                                  subsample_width:(subsample_width + width_original)].detach().cpu().numpy()
+                    attention_map = np.where(extent_binary == 1, attention_map, self.no_data)
+                    with rasterio.open(
+                        f"{dir_attention_out}/{sp_}_{date_}_attention_{self.training_conf.env_list[i_env]}.tif", 
+                        'w', 
+                        height = extent_binary.shape[0], 
+                        width = extent_binary.shape[1],
+                        count = 1, 
+                        nodata = self.no_data, 
+                        crs = extent_crs, 
+                        dtype = rasterio.float32, 
+                        transform = extent_transform
+                    ) as dst:
+                        dst.write(attention_map, 1)
+                    
             plt.title(f'{sp_}: {date_}')
             plt.savefig(f'{dir_png_out}/{sp_}_{date_}_predict.png', dpi = 200)
             plt.close()
@@ -598,7 +665,7 @@ class LitUNetSDM(pl.LightningModule):
                 height = extent_binary.shape[0], 
                 width = extent_binary.shape[1],
                 count = 1, 
-                nodata = -9, 
+                nodata = self.no_data, 
                 crs = extent_crs, 
                 dtype = rasterio.float32, 
                 transform = extent_transform
@@ -622,11 +689,12 @@ class LitUNetSDM(pl.LightningModule):
                 yaml.dump(vars(self.DeepSDM_conf), f)
                 
             self.logger.experiment.log_artifact(run_id = self.logger.run_id, local_path = f'{self.tmp_path}/DeepSDM_conf.yaml', artifact_path = 'conf')
-            self.logger.experiment.log_artifact(run_id = self.logger.run_id, local_path = 'workspace/cooccurrence_vector.json', artifact_path = 'conf')
-            self.logger.experiment.log_artifact(run_id = self.logger.run_id, local_path = 'workspace/env_information.json', artifact_path = 'conf')
-            self.logger.experiment.log_artifact(run_id = self.logger.run_id, local_path = 'workspace/k_information.json', artifact_path = 'conf')
-            self.logger.experiment.log_artifact(run_id = self.logger.run_id, local_path = 'workspace/species_information.json', artifact_path = 'conf')
-
+            self.logger.experiment.log_artifact(run_id = self.logger.run_id, local_path = self.DeepSDM_conf.meta_json_files['env_inf'], artifact_path = 'conf')
+            self.logger.experiment.log_artifact(run_id = self.logger.run_id, local_path = self.DeepSDM_conf.meta_json_files['sp_inf'], artifact_path = 'conf')
+            self.logger.experiment.log_artifact(run_id = self.logger.run_id, local_path = self.DeepSDM_conf.meta_json_files['k_inf'], artifact_path = 'conf')
+            self.logger.experiment.log_artifact(run_id = self.logger.run_id, local_path = self.DeepSDM_conf.meta_json_files['co_vec'], artifact_path = 'conf')
+            self.logger.experiment.log_artifact(run_id = self.logger.run_id, local_path = self.DeepSDM_conf.geo_extent_file, artifact_path = 'conf')
+            
     def on_fit_end(self):
         if self.trainer.global_rank == 0:
             for cb in self.trainer.callbacks:

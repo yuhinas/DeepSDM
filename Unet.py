@@ -89,7 +89,7 @@ class Unet(nn.Module):
         
         # attention
         # Q
-        q = biovector_input.flatten(1)
+        q = biovector_input.flatten(1).to(torch.float32)
         q = self.q_linear1(q)
         q = self.q_linear2(q)
         q = self.q_linear3(q)
@@ -118,7 +118,7 @@ class Unet(nn.Module):
         A3 = F.softmax(self.a_linear3(A2), dim = 1)
         A4 = F.softmax(self.a_linear4(A3), dim = 1)
         
-        vec1 = biovector_input.view(-1, self.num_vector)
+        vec1 = biovector_input.view(-1, self.num_vector).to(torch.float32)
         vec1 = F.leaky_relu(self.v_fc(vec1))
         vec1 = vec1.view(-1, 1, self.height, self.width)
         vec1 = F.leaky_relu(self.vec_conv1_1(vec1))
@@ -148,8 +148,7 @@ class Unet(nn.Module):
         conv1 = F.leaky_relu(self.conv1_1(multiply1))
         conv1 = F.group_norm(conv1, num_groups = 4)
         merge1 = torch.cat([conv1, vec1], dim = 1)
-        conv1 = A1[:, :, None, None] * merge1
-        conv1 = F.leaky_relu(self.conv1_3(conv1))
+        conv1 = F.leaky_relu(self.conv1_3(merge1))
         conv1 = F.group_norm(conv1, num_groups = 4)
         conv1 = F.leaky_relu(self.conv1_2(conv1))
         pool1 = F.max_pool2d(conv1, kernel_size = 2)
@@ -157,8 +156,7 @@ class Unet(nn.Module):
         conv2 = F.leaky_relu(self.conv2_1(pool1))
         conv2 = F.group_norm(conv2, num_groups = 4)
         merge2 = torch.cat([conv2, vec2], dim = 1)
-        conv2 = A2[:, :, None, None] * merge2
-        conv2 = F.leaky_relu(self.conv2_3(conv2))
+        conv2 = F.leaky_relu(self.conv2_3(merge2))
         conv2 = F.group_norm(conv2, num_groups = 4)
         conv2 = F.leaky_relu(self.conv2_2(conv2))
         pool2 = F.max_pool2d(conv2, kernel_size = 2)
@@ -166,8 +164,7 @@ class Unet(nn.Module):
         conv3 = F.leaky_relu(self.conv3_1(pool2))
         conv3 = F.group_norm(conv3, num_groups = 4)
         merge3 = torch.cat([conv3, vec3], dim = 1)
-        conv3 = A3[:, :, None, None] * merge3
-        conv3 = F.leaky_relu(self.conv3_3(conv3))
+        conv3 = F.leaky_relu(self.conv3_3(merge3))
         conv3 = F.group_norm(conv3, num_groups = 4)
         conv3 = F.leaky_relu(self.conv3_2(conv3))
         pool3 = F.max_pool2d(conv3, kernel_size = 2)
@@ -175,8 +172,7 @@ class Unet(nn.Module):
         conv4 = F.leaky_relu(self.conv4_1(pool3))
         conv4 = F.group_norm(conv4, num_groups = 4)
         merge4 = torch.cat([conv4, vec4], dim = 1)
-        conv4 = A4[:, :, None, None] * merge4
-        conv4 = F.leaky_relu(self.conv4_3(conv4))
+        conv4 = F.leaky_relu(self.conv4_3(merge4))
         conv4 = F.group_norm(conv4, num_groups = 4)
         conv4 = F.leaky_relu(self.conv4_2(conv4))
         drop4 = F.dropout(conv4)
@@ -213,7 +209,7 @@ class Unet(nn.Module):
 #         conv9 = self.image1(conv9)
 #         image_output = self.batch_norm(conv9)
 #         image_output = F.instance_norm(conv9)
-        return image_output
+        return image_output, A
     
     def _init_weights(module):
         if isinstance(module, nn.Conv2d):
