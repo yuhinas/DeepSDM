@@ -87,9 +87,13 @@ class LitDeepSDMData(pl.LightningDataModule):
                 label_stack['species_date'].append(f'{species_}_{date_}')
                 label_stack['species'].append(f'{species_}')
                 label_stack['date'].append(f'{date_}')
-                with rasterio.open(os.path.join(self.sp_inf['dir_base'], f"{self.sp_inf['file_name'][species_][date_]}")) as f:
-                    label_tensor_list.append(ToTensor()(f.read(1)))
-                                             
+                if species_ in self.sp_inf['file_name']:
+                    with rasterio.open(os.path.join(self.sp_inf['dir_base'], f"{self.sp_inf['file_name'][species_][date_]}")) as f:
+                        label_tensor_list.append(ToTensor()(f.read(1)))
+                else:
+                    label_tensor_list.append(torch.zeros([1, 
+                                                          self.DeepSDM_conf.spatial_conf_tmp['grid_size'] * self.DeepSDM_conf.spatial_conf_tmp['num_of_grid_y'], 
+                                                          self.DeepSDM_conf.spatial_conf_tmp['grid_size'] * self.DeepSDM_conf.spatial_conf_tmp['num_of_grid_x']]))
         t = torch.cat(label_tensor_list)
         label_stack['tensor'] = torch.where(t < 0, 0, t)
         
