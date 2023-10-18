@@ -101,9 +101,9 @@ class LitUNetSDM(pl.LightningModule):
 
 
         #l3    
-        l3_matrix = l.where(k2 == 0, zero_tensor) #torch.zeros(l.shape, device=l.device))
+        l3_matrix = l.where(((labels == 0) & (k2 == 0)), zero_tensor) #torch.zeros(l.shape, device=l.device))
         l3_loss = l3_matrix.sum(axis = (1, 2, 3))
-        l3_count = (k2 == 0).sum(axis = (1, 2, 3))
+        l3_count = ((labels == 0) & (k2 == 0)).sum(axis = (1, 2, 3))
         l3_loss = (l3_loss / l3_count).nan_to_num() 
 
         k1_loss = l1_loss.sum() / len(image_output)
