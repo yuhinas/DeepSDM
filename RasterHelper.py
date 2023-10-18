@@ -566,11 +566,20 @@ class RasterHelper:
     #########################################
         
     def create_k_info(self):
-
+        
+        
+        # create files of the 'no_k' situation 
+        self.nok_out = './workspace/raster_data/k_nok'
+        if not os.path.exists(self.nok_out):
+            os.makedirs(self.nok_out)
+        nok_info = dict()
+        nok_info['dir_base'] = self.nok_out
+        nok_info['file_name'] = dict() 
+        
+        # create files of regular k situation        
         self.k_out = './workspace/raster_data/k'
         if not os.path.exists(self.k_out):
-            os.makedirs(self.k_out)
-        
+            os.makedirs(self.k_out)        
         k_info = dict()
         k_info['dir_base'] = self.k_out
         k_info['file_name'] = dict()
@@ -627,15 +636,32 @@ class RasterHelper:
                 img.write(rst_result, 1)
 
             k_info['file_name'][date_target_log] = f'k_{date_target_log}.tif'
+            nok_info['file_name'][date_target_log] = 'nok.tif'
 
             date_target_start = self.time_step(date_target_start)
             date_target_end = self.time_span(date_target_start)
             day_target_start = (date_target_start - self.date_start).days
             day_target_end = (date_target_end - self.date_start).days
 
+        # tifs without k situation
+        with rasterio.open(
+            'nok.tif',
+            'w', 
+            height = extent_binary.shape[0], 
+            width = extent_binary.shape[1], 
+            count = 1, 
+            nodata = self.no_data,
+            crs = extent_crs, 
+            dtype = rasterio.float32, 
+            transform = extent_transform
+        ) as img:
+            img.write(np.zeros([extent_binary.shape[0], extent_binary.shape[1]]), 1)              
+            
+            
         with open('./workspace/k_information.json', 'w') as f:
-            json.dump(k_info, f)        
-
+            json.dump(k_info, f)               
+        with open('./workspace/k_information_nok.json', 'w') as f:
+            json.dump(nok_info, f)
             
     def create_species_raster(self):
 
