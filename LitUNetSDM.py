@@ -107,7 +107,7 @@ class LitUNetSDM(pl.LightningModule):
         l3_loss = (l3_loss / l3_count).nan_to_num() 
 
         k1_loss = l1_loss.sum() / len(image_output)
-        k2_loss = l2_loss.sum() / len(image_output)
+        k2_loss = self.training_conf.k2 * l2_loss.sum() / len(image_output)
         k3_loss = self.training_conf.k3 * l3_loss.sum() / len(image_output)
         total_loss = k1_loss + k2_loss + k3_loss
 
