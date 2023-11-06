@@ -1,0 +1,41 @@
+version: v2
+extent_binary: ./workspace/extent_binary.tif
+meta_json_files:
+  env_inf: ./workspace/env_information.json
+  sp_inf: ./workspace/species_information.json
+  k_inf: ./workspace/k_information.json
+  co_vec: ./workspace/cooccurrence_vector.json
+env_list: 
+ - pr
+ - tas
+ - elev
+ - EVI
+ - landcover_PC00
+ - landcover_PC01
+ - landcover_PC02
+ - landcover_PC03
+env_list_non_normalized:
+ - landcover_PC00
+ - landcover_PC01
+ - landcover_PC02
+ - landcover_PC03
+time: 
+ - 2017-11
+ - 2017-12
+ - 2018-01
+ - 2018-02
+ - 2018-03
+ - 2018-04
+ - 2018-05
+ - 2018-06
+ - 2018-07
+ - 2018-08
+ - 2018-09
+ - 2018-10
+num_species: 12
+pa_percentage: [0.1, 0.5]
+prevalence: [0.03, 0.05, 0.07, 0.1, 0.3, 0.5]
+virtualspecies_conf:
+  approach: pca
+  realistic.sp: TRUE
+  convert.to.PA: TRUE  PA.method: probability
