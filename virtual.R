@@ -6,7 +6,6 @@ library(rjson)
 library(yaml)
 
 set.seed(42)
-
 # functions
 generate_envall <- function(env_list, extent_binary, env_inf){
   df <- data.frame('env' = character(0), 'mean' = numeric(0), 'sd' = numeric(0))
@@ -36,7 +35,6 @@ generate_envall <- function(env_list, extent_binary, env_inf){
   names(env_all) <- env_list
   return(list(df = df, env_all = env_all))
 }
-
 generate_env_pca <- function(virtual_conf, env_all, time, env_list, env_inf){
   if(virtual_conf$env_pca == 'all'){
     env_pca <- env_all
@@ -50,7 +48,6 @@ generate_env_pca <- function(virtual_conf, env_all, time, env_list, env_inf){
   }
   return(env_pca)
 }
-
 generate_convertToPA <- function(virtual_conf, random_sp_time, random_method, random_beta, random_alpha, random_cutoff){
   if(virtual_conf$virtualspecies_conf$PA.method == 'probability'){
     random_sp_time_pa <- convertToPA(random_sp_time,
