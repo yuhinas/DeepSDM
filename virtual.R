@@ -6,6 +6,68 @@ library(rjson)
 library(yaml)
 
 set.seed(42)
+
+# functions
+generate_envall <- function(env_list, extent_binary, env_inf){
+  df <- data.frame('env' = character(0), 'mean' = numeric(0), 'sd' = numeric(0))
+  for(env in env_list){
+    result_env <- raster(extent_binary)
+    values(result_env) <- 0
+    value <- c()
+    for(t in time){
+      rst <- raster(env_inf$info[[env]][[t]]$tif_span_avg)
+      value <- c(value, values(rst)[values(extent_binary) == 1])
+      result_env <- result_env + rst
+    }
+    df[nrow(df)+1, ] <- c(env, mean(value), sd(value))
+    result_env <- result_env / length(time)
+    writeRaster(result_env, file.path('virtual', version, sprintf('%s_1yr_avg.tif', env)), overwrite = T)
+  }
+  write.csv(df, file.path('virtual', version, 'env_inf.csv'), row.names = FALSE)
+  
+  # load last 1 yr average data
+  df <- read.csv(file.path('virtual', version, 'env_inf.csv'), row.names = 1)
+  for(env in env_list){
+    env_rst <- (raster(file.path('virtual', version, sprintf('%s_1yr_avg.tif', env))) - df[env, 'mean']) / df[env, 'sd']
+    assign(paste0(env, '_all'), env_rst)
+  }
+  rsts <- lapply(env_list, function(env_list) get(paste0(env_list, "_all")))
+  env_all <- stack(rsts)
+  names(env_all) <- env_list
+  return(list(df = df, env_all = env_all))
+}
+
+generate_env_pca <- function(virtual_conf, env_all, time, env_list, env_inf){
+  if(virtual_conf$env_pca == 'all'){
+    env_pca <- env_all
+  }
+  if(virtual_conf$env_pca == 'random'){
+    time_random <- sample(time, 1)
+    rsts_random <- lapply(env_list, function(env_list) (raster(env_inf$info[[env_list]][[time_random]]$tif_span_avg) - df[env_list, 'mean']) / df[env_list, 'sd'])
+    env_random <- stack(rsts_random)
+    names(env_random) <- env_list
+    env_pca <- env_random
+  }
+  return(env_pca)
+}
+
+generate_convertToPA <- function(virtual_conf, random_sp_time, random_method, random_beta, random_alpha, random_cutoff){
+  if(virtual_conf$virtualspecies_conf$PA.method == 'probability'){
+    random_sp_time_pa <- convertToPA(random_sp_time,
+                                     PA.method = random_method, 
+                                     beta = as.numeric(random_beta),
+                                     alpha = as.numeric(random_alpha), 
+                                     plot = T)
+  }
+  if(virtual_conf$virtualspecies_conf$PA.method == 'threshold'){
+    random_sp_time_pa <- convertToPA(random_sp_time,
+                                     PA.method = random_method, 
+                                     beta = as.numeric(random_cutoff), 
+                                     plot = T)
+  }
+  return(random_sp_time_pa)
+}
+
 virtual_conf <- yaml.load_file('./virtual_conf.yaml')
 extent_binary <- raster(virtual_conf$extent_binary)
 version <- virtual_conf$version
@@ -23,44 +85,27 @@ env_list <- sort(virtual_conf$env_list)
 
 # last year average
 time <- virtual_conf$time
-df <- data.frame('env' = character(0), 'mean' = numeric(0), 'sd' = numeric(0))
-for(env in env_list){
-  result_env <- raster(extent_binary)
-  values(result_env) <- 0
-  value <- c()
-  for(t in time){
-    rst <- raster(env_inf$info[[env]][[t]]$tif_span_avg)
-    value <- c(value, values(rst)[values(extent_binary) == 1])
-    result_env <- result_env + rst
-  }
-  df[nrow(df)+1, ] <- c(env, mean(value), sd(value))
-  result_env <- result_env / length(time)
-  writeRaster(result_env, file.path('virtual', version, sprintf('%s_1yr_avg.tif', env)), overwrite = T)
-}
-write.csv(df, file.path('virtual', version, 'env_inf.csv'), row.names = FALSE)
-
-# load last 1 yr average data
-df <- read.csv(file.path('virtual', version, 'env_inf.csv'), row.names = 1)
-for(env in env_list){
-  env_rst <- (raster(file.path('virtual', version, sprintf('%s_1yr_avg.tif', env))) - df[env, 'mean']) / df[env, 'sd']
-  assign(paste0(env, '_all'), env_rst)
-}
-
-rsts <- lapply(env_list, function(env_list) get(paste0(env_list, "_all")))
-env_all <- stack(rsts)
-names(env_all) <- env_list
 prevalence <- virtual_conf$prevalence
+
+# generate env_all
+output <- generate_envall(env_list, extent_binary, env_inf)
+df <- output$df
+env_all <- output$env_all
+
 for(i_sp in 1:virtual_conf$num_species){
   # i_sp <- 1
   sp <- paste0('sp', sprintf('%02d', i_sp))
   
+  # differenct virtual_conf$env_pca
+  env_pca <- generate_env_pca(virtual_conf, env_all, time, env_list, env_inf)
+  
   # use 21 year average environment to conduct PCA
-  random_sp <- generateRandomSp(env_all, 
+  random_sp <- generateRandomSp(env_pca, 
                                 approach = virtual_conf$virtualspecies_conf$approach, 
                                 realistic.sp = virtual_conf$virtualspecies_conf$realistic.sp, 
                                 convert.to.PA = virtual_conf$virtualspecies_conf$convert.to.PA, 
-                                PA.method = virtual_conf$virtualspecies_conf$PA.method, 
-                                species.prevalence = prevalence[((i_sp-1)%%length(prevalence) + 1)], 
+                                PA.method = virtual_conf$virtualspecies_conf$PA.method,
+                                species.prevalence = prevalence[((i_sp-1)%%length(prevalence) + 1)],
                                 plot = T)
   # create folders
   dir_sp <- sprintf('virtual/%s/%s', version, sp)
@@ -68,6 +113,10 @@ for(i_sp in 1:virtual_conf$num_species){
     dir.create(dir_sp)
   }  
   
+  # if random time env is set, log the time_random
+  if(virtual_conf$env_pca == 'random'){
+    random_sp[['time_used']] <- time_random
+  }
   save(random_sp, file = file.path(dir_sp, sprintf('%s.RData', sp)))
   
   random_means <- random_sp$details$means
@@ -99,13 +148,11 @@ for(i_sp in 1:virtual_conf$num_species){
     save(random_sp_time, file = file.path(dir_sp_time, sprintf('%s_%s.RData', sp, t)))
     
     # convert continuous map to presence-absence map
-    random_sp_time_pa <- convertToPA(random_sp_time,
-                                     PA.method = random_method, 
-                                     beta = as.numeric(random_beta),
-                                     alpha = as.numeric(random_alpha), 
-                                     plot = F)
+    random_sp_time_pa <- generate_convertToPA(virtual_conf, random_sp_time, random_method, random_beta, random_alpha, random_cutoff)
     save(random_sp_time_pa, file = file.path(dir_sp_time, sprintf('%s_%s_pa.RData', sp, t)))
-    writeRaster(random_sp_time_pa$pa.raster, file.path(dir_sp_time, sprintf('%s_%s_pa.tif', sp, t)), overwrite = T)
+    pa_raster <- random_sp_time_pa$pa.raster
+    values(pa_raster)[values(extent_binary) == 0] <- NA
+    writeRaster(pa_raster, file.path(dir_sp_time, sprintf('%s_%s_pa.tif', sp, t)), overwrite = T)
     
     # CONDITION I: a random sampling based on the specific percentage of all grids of Taiwan
     for(p in virtual_conf$pa_percentage){  

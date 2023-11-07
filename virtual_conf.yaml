@@ -1,4 +1,4 @@
-version: v2
+version: v4
 extent_binary: ./workspace/extent_binary.tif
 meta_json_files:
   env_inf: ./workspace/env_information.json
@@ -32,10 +32,15 @@ time:
  - 2018-08
  - 2018-09
  - 2018-10
-num_species: 12
+num_species: 7
 pa_percentage: [0.1, 0.5]
-prevalence: [0.03, 0.05, 0.07, 0.1, 0.3, 0.5]
+prevalence: [0.03, 0.05, 0.07, 0.1, 0.3, 0.5, 0.7]
 virtualspecies_conf:
   approach: pca
   realistic.sp: TRUE
-  convert.to.PA: TRUE  PA.method: probability
+  convert.to.PA: TRUE
+  PA.method: threshold
+# 生成物種的niche的環境時間點。
+# all: 所有時間點平均
+# random: 隨機一個時間點
+env_pca: all
