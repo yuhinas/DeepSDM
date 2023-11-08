@@ -37,14 +37,14 @@ generate_envall <- function(env_list, extent_binary, env_inf){
 }
 generate_env_pca <- function(virtual_conf, env_all, time, env_list, env_inf){
   if(virtual_conf$env_pca == 'all'){
-    env_pca <- env_all
+    env_pca <- list(env_pca = env_all)
   }
   if(virtual_conf$env_pca == 'random'){
     time_random <- sample(time, 1)
     rsts_random <- lapply(env_list, function(env_list) (raster(env_inf$info[[env_list]][[time_random]]$tif_span_avg) - df[env_list, 'mean']) / df[env_list, 'sd'])
     env_random <- stack(rsts_random)
     names(env_random) <- env_list
-    env_pca <- env_random
+    env_pca <- list(env_pca = env_random, time_random = time_random)
   }
   return(env_pca)
 }
@@ -97,7 +97,7 @@ for(i_sp in 1:virtual_conf$num_species){
   env_pca <- generate_env_pca(virtual_conf, env_all, time, env_list, env_inf)
   
   # use 21 year average environment to conduct PCA
-  random_sp <- generateRandomSp(env_pca, 
+  random_sp <- generateRandomSp(env_pca$env_pca, 
                                 approach = virtual_conf$virtualspecies_conf$approach, 
                                 realistic.sp = virtual_conf$virtualspecies_conf$realistic.sp, 
                                 convert.to.PA = virtual_conf$virtualspecies_conf$convert.to.PA, 
@@ -112,7 +112,7 @@ for(i_sp in 1:virtual_conf$num_species){
   
   # if random time env is set, log the time_random
   if(virtual_conf$env_pca == 'random'){
-    random_sp[['time_used']] <- time_random
+    random_sp[['time_used']] <- env_pca$time_random
   }
   save(random_sp, file = file.path(dir_sp, sprintf('%s.RData', sp)))
   

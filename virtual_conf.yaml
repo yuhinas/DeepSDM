@@ -1,4 +1,4 @@
-version: v4
+version: v5
 extent_binary: ./workspace/extent_binary.tif
 meta_json_files:
   env_inf: ./workspace/env_information.json
@@ -43,4 +43,4 @@ virtualspecies_conf:
 # 生成物種的niche的環境時間點。
 # all: 所有時間點平均
 # random: 隨機一個時間點
-env_pca: all
+env_pca: random
