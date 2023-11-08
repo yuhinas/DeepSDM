@@ -147,7 +147,7 @@ for(i_sp in 1:virtual_conf$num_species){
     # convert continuous map to presence-absence map
     random_sp_time_pa <- generate_convertToPA(virtual_conf, random_sp_time, random_method, random_beta, random_alpha, random_cutoff)
     save(random_sp_time_pa, file = file.path(dir_sp_time, sprintf('%s_%s_pa.RData', sp, t)))
-    pa_raster <- random_sp_time_pa$pa.raster
+    pa_raster <- raster(random_sp_time_pa$pa.raster)
     values(pa_raster)[values(extent_binary) == 0] <- NA
     writeRaster(pa_raster, file.path(dir_sp_time, sprintf('%s_%s_pa.tif', sp, t)), overwrite = T)
     
