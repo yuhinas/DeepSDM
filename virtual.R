@@ -14,7 +14,10 @@ generate_envall <- function(env_list, extent_binary, env_inf){
     values(result_env) <- 0
     value <- c()
     for(t in time){
-      rst <- raster(env_inf$info[[env]][[t]]$tif_span_avg)
+      # t : 'yyyy-mm-dd'
+      # t need to be changed to 'yyyy-mm'
+      t_ <- sprintf('%s-%s', strsplit(t, '-')[[1]][1], strsplit(t, '-')[[1]][2])
+      rst <- raster(env_inf$info[[env]][[t_]]$tif_span_avg)
       value <- c(value, values(rst)[values(extent_binary) == 1])
       result_env <- result_env + rst
     }
@@ -41,7 +44,8 @@ generate_env_pca <- function(virtual_conf, env_all, time, env_list, env_inf){
   }
   if(virtual_conf$env_pca == 'random'){
     time_random <- sample(time, 1)
-    rsts_random <- lapply(env_list, function(env_list) (raster(env_inf$info[[env_list]][[time_random]]$tif_span_avg) - df[env_list, 'mean']) / df[env_list, 'sd'])
+    time_random_ <- sprintf('%s-%s', strsplit(time_random, '-')[[1]][1], strsplit(time_random, '-')[[1]][2])
+    rsts_random <- lapply(env_list, function(env_list) (raster(env_inf$info[[env_list]][[time_random_]]$tif_span_avg) - df[env_list, 'mean']) / df[env_list, 'sd'])
     env_random <- stack(rsts_random)
     names(env_random) <- env_list
     env_pca <- list(env_pca = env_random, time_random = time_random)
@@ -89,6 +93,11 @@ output <- generate_envall(env_list, extent_binary, env_inf)
 df <- output$df
 env_all <- output$env_all
 
+# species information (virtual species)
+sp_inf_virtual <- list()
+sp_inf_virtual[['dir_base']] <- sprintf("./virtual/%s/", version)
+sp_inf_virtual[['file_name']] <- list()
+
 for(i_sp in 1:virtual_conf$num_species){
   # i_sp <- 1
   sp <- paste0('sp', sprintf('%02d', i_sp))
@@ -109,6 +118,7 @@ for(i_sp in 1:virtual_conf$num_species){
   if(!dir.exists(dir_sp)){
     dir.create(dir_sp)
   }  
+  sp_inf_virtual[['file_name']][[sp]] <- list()
   
   # if random time env is set, log the time_random
   if(virtual_conf$env_pca == 'random'){
@@ -127,7 +137,10 @@ for(i_sp in 1:virtual_conf$num_species){
   #specific time data
   for(t in time){
     # t <- time[1]
-    rsts_time <- lapply(env_list, function(env_list) (raster(env_inf$info[[env_list]][[t]]$tif_span_avg) - df[env_list, 'mean']) / df[env_list, 'sd'])
+    # t : 'yyyy-mm-dd'
+    # t need to be changed to 'yyyy-mm'
+    t_ <- sprintf('%s-%s', strsplit(t, '-')[[1]][1], strsplit(t, '-')[[1]][2])
+    rsts_time <- lapply(env_list, function(env_list) (raster(env_inf$info[[env_list]][[t_]]$tif_span_avg) - df[env_list, 'mean']) / df[env_list, 'sd'])
     env_time <- stack(rsts_time)
     names(env_time) <- env_list
     
@@ -148,7 +161,8 @@ for(i_sp in 1:virtual_conf$num_species){
     random_sp_time_pa <- generate_convertToPA(virtual_conf, random_sp_time, random_method, random_beta, random_alpha, random_cutoff)
     save(random_sp_time_pa, file = file.path(dir_sp_time, sprintf('%s_%s_pa.RData', sp, t)))
     pa_raster <- raster(random_sp_time_pa$pa.raster)
-    values(pa_raster)[values(extent_binary) == 0] <- NA
+    values(pa_raster)[values(extent_binary) == 0] <- -9999
+    NAvalue(pa_raster) <- -9999
     writeRaster(pa_raster, file.path(dir_sp_time, sprintf('%s_%s_pa.tif', sp, t)), overwrite = T)
     
     # CONDITION I: a random sampling based on the specific percentage of all grids of Taiwan
@@ -169,6 +183,8 @@ for(i_sp in 1:virtual_conf$num_species){
       occurrence_ideal <- raster(random_sp_time_pa$pa.raster)
       values(occurrence_ideal)[!is.na(values(occurrence_ideal))] <- 0
       occurrence_ideal[cellFromXY(occurrence_ideal, points_ideal)] <- points_ideal$Observed
+      values(occurrence_ideal)[values(extent_binary) == 0] <- -9999
+      NAvalue(occurrence_ideal) <- -9999
       writeRaster(occurrence_ideal, file.path(dir_sp_time, sprintf('ideal_map_%s_%s_%s.tif', sp, t, p)), overwrite = T)
     }
     
@@ -180,7 +196,7 @@ for(i_sp in 1:virtual_conf$num_species){
                                    plot = F)
     save(sampleocc, file = file.path(dir_sp_time, sprintf('sampleocc_%s_%s_real.RData', sp, t)))
     points_real = sampleocc$sample.points
-    k2 <- raster(file.path(k_inf$dir_base, k_inf$file_name[[sprintf('%s-01', t)]]))
+    k2 <- raster(file.path(k_inf$dir_base, k_inf$file_name[[t]]))
     values(k2)[values(k2) == 0] <- NA
     points_real <- points_real[!is.na(raster::extract(k2, points_real[c('x', 'y')])), ]
     
@@ -191,6 +207,10 @@ for(i_sp in 1:virtual_conf$num_species){
     occurrence_real <- raster(random_sp$pa.raster)
     values(occurrence_real)[!is.na(values(occurrence_real))] <- 0
     occurrence_real[cellFromXY(occurrence_real, points_real)] <- points_real$Observed
+    values(occurrence_real)[values(extent_binary) == 0] <- -9999
+    NAvalue(occurrence_real) <- -9999
     writeRaster(occurrence_real, file.path(dir_sp_time, sprintf('real_map_%s_%s.tif', sp, t)), overwrite = T)
+    sp_inf_virtual[['file_name']][[sp]][[t]] <- sprintf('%s/real_map_%s_%s.tif', sp, sp, t)
   }
 }
+write_yaml(sp_inf_virtual, file = "./species_information_virtual.yaml")
