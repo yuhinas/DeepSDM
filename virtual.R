@@ -210,7 +210,7 @@ for(i_sp in 1:virtual_conf$num_species){
     values(occurrence_real)[values(extent_binary) == 0] <- -9999
     NAvalue(occurrence_real) <- -9999
     writeRaster(occurrence_real, file.path(dir_sp_time, sprintf('real_map_%s_%s.tif', sp, t)), overwrite = T)
-    sp_inf_virtual[['file_name']][[sp]][[t]] <- sprintf('%s/real_map_%s_%s.tif', sp, sp, t)
+    sp_inf_virtual[['file_name']][[sp]][[t]] <- sprintf('%s/%s/real_map_%s_%s.tif', sp, t, sp, t)
   }
 }
-write_yaml(sp_inf_virtual, file = "./species_information_virtual.yaml")
+write_yaml(sp_inf_virtual, file = sprintf("./virtual/%s/species_information_virtual.yaml", version))
