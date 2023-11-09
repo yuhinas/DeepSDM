@@ -12,6 +12,7 @@ training_conf:
   epochs: 300
   experiment_name: DeepSDM 43sp
   k2_p: 0.3333333333333333
+  k2: 1
   k3: 0.08333333333333333
   learning_rate: 0.0001
   num_predict_steps: 14
@@ -86,6 +87,7 @@ temporal_conf:
   date_start: '2000-01-01'
   month_span: 3
   month_step: 1
+
 
 # data preparation configurations
 file_make_extent: /work/klok0126/Chelsa/cmi_/CHELSA_cmi_09_2017_V.2.1.tif
