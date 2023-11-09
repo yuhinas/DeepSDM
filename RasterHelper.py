@@ -194,7 +194,7 @@ class RasterHelper:
             #mem_driver= gdal.GetDriverByName('MEM')
             # not really mem driver
             mem_driver= gdal.GetDriverByName('GTiff')
-            mem_tif = mem_driver.Create("/tmp/deepsdm/not_really_mem_driver.tif", 
+            mem_tif = mem_driver.Create("/tmp/not_really_mem_driver.tif", 
                                    destination.RasterXSize, 
                                    destination.RasterYSize, 
                                    1, 
@@ -300,13 +300,16 @@ class RasterHelper:
                     # this part has not been tested yet
                     y = int(year)
                     m = int(month)
+                    
                     env_out = conf['env_out_template'].replace('[YEAR]', f'{y:04d}').replace('[MONTH]', f'{m:02d}')
                     full_out_path = os.path.join(medium_env_dir, env)
                     if not os.path.isdir(full_out_path):
                         os.makedirs(full_out_path)
                     self.raw_to_medium_(f'{conf["raw_env_dir"]}/{fname}', f'{full_out_path}/{env_out}')
                     # fill no shit, missing data means missing data
-                    self.env_medium_list[env][f'{y:04d}-{m:02d}'] = f'{full_out_path}/{env_out}'
+                    # representation of yyyy-mm-dd
+                    y_m_d = datetime.strftime(datetime.strptime(f'{y}-{m}', '%Y-%m'), '%Y-%m-%d')
+                    self.env_medium_list[env][y_m_d] = f'{full_out_path}/{env_out}'
                     # print(env_out)
 
                 elif every_month:
@@ -318,7 +321,9 @@ class RasterHelper:
                     self.raw_to_medium_(f'{conf["raw_env_dir"]}/{fname}', f'{full_out_path}/{env_out}')
                     # fill year
                     for y in range(year_coverages_start, year_coverages_end + 1):
-                        self.env_medium_list[env][f'{y:04d}-{m:02d}'] = f'{full_out_path}/{env_out}'
+                        # representation of yyyy-mm-dd
+                        y_m_d = datetime.strftime(datetime.strptime(f'{y}-{m}', '%Y-%m'), '%Y-%m-%d')
+                        self.env_medium_list[env][y_m_d] = f'{full_out_path}/{env_out}'
 
                 elif every_year and not with_doy:
                     y = int(year)
@@ -329,7 +334,9 @@ class RasterHelper:
                     self.raw_to_medium_(f'{conf["raw_env_dir"]}/{fname}', f'{full_out_path}/{env_out}')
                     # fill month
                     for m in range(1, 13):
-                        self.env_medium_list[env][f'{y:04d}-{m:02d}'] = f'{full_out_path}/{env_out}'
+                        # representation of yyyy-mm-dd
+                        y_m_d = datetime.strftime(datetime.strptime(f'{y}-{m}', '%Y-%m'), '%Y-%m-%d')
+                        self.env_medium_list[env][y_m_d] = f'{full_out_path}/{env_out}'
 
                 elif every_year and with_doy:
                     # this part has not been tested yet
@@ -342,16 +349,16 @@ class RasterHelper:
                     if self.doy_to_month_tifs is None:
                         self.doy_to_month_tifs = dict()
                     
-                    y_m = f'{y:04d}-{m:02d}'
-                    if y_m not in self.doy_to_month_tifs:
-                        self.doy_to_month_tifs[y_m] = []
+                    y_m_d = datetime.strftime(datetime.strptime(f'{y}-{m}', '%Y-%m'), '%Y-%m-%d')
+                    if y_m_d not in self.doy_to_month_tifs:
+                        self.doy_to_month_tifs[y_m_d] = []
                         
                     env_out = conf['env_out_template'].replace('[YEAR]', f'{y:04d}').replace('[MONTH]', f'{m:02d}')
                     full_out_path = os.path.join(medium_env_dir, env)
                     if not os.path.isdir(full_out_path):
                         os.makedirs(full_out_path)
 
-                    self.doy_to_month_tifs[y_m].append(dict(
+                    self.doy_to_month_tifs[y_m_d].append(dict(
                         raw = f'{conf["raw_env_dir"]}/{fname}',
                         medium = f'{full_out_path}/{env_out}'
                     ))
@@ -370,13 +377,15 @@ class RasterHelper:
                     # fill both year and month
                     for y in range(year_coverages_start, year_coverages_end + 1):
                         for m in range(1, 13):
-                            self.env_medium_list[env][f'{y:04d}-{m:02d}'] = f'{full_out_path}/{env_out}'
+                            # representation of yyyy-mm-dd
+                            y_m_d = datetime.strftime(datetime.strptime(f'{y}-{m}', '%Y-%m'), '%Y-%m-%d')
+                            self.env_medium_list[env][y_m_d] = f'{full_out_path}/{env_out}'
     #                 print(env_out)
         if self.doy_to_month_tifs is not None:
             self.doy_to_month_tifs = dict(sorted(self.doy_to_month_tifs.items()))
-            for y_m in self.doy_to_month_tifs:
-                self.raw_to_medium_agg_(self.doy_to_month_tifs[y_m])
-                self.env_medium_list[env][y_m] = self.doy_to_month_tifs[y_m][0]['medium'] #f'{full_out_path}/{env_out}'
+            for y_m_d in self.doy_to_month_tifs:
+                self.raw_to_medium_agg_(self.doy_to_month_tifs[y_m_d])
+                self.env_medium_list[env][y_m_d] = self.doy_to_month_tifs[y_m_d][0]['medium'] #f'{full_out_path}/{env_out}'
 
         self.env_medium_list[env] = dict(sorted(self.env_medium_list[env].items()))
         
@@ -449,7 +458,7 @@ class RasterHelper:
         env_info = dict(
             info = dict(),
             dir_base = './'
-        )
+        )        
         y_m_combs = np.array(np.meshgrid(np.arange(self.date_start.year, self.date_end.year + 1, dtype=int), np.arange(1, 13, dtype=int))).T.reshape(-1, 2)
 
         with rasterio.open('./workspace/extent_binary.tif') as extent_binary_raster:
@@ -468,49 +477,51 @@ class RasterHelper:
             env_srcs = []
             for i in range(y_m_combs.shape[0]):
                 y0, m0 = y_m_combs[i]
-                y0_m0 = f'{y0:04d}-{m0:02d}'
+                y0_m0_d0 = datetime.strftime(datetime.strptime(f'{y0}-{m0}', '%Y-%m'), '%Y-%m-%d')
                 try:
-                    env_srcs.append(self.env_medium_list[env][y0_m0])
+                    env_srcs.append(self.env_medium_list[env][y0_m0_d0])
                 except:
-                    print(f"******* Warning. Missing data of env:{env} on {y0_m0}.")
-                    self.env_medium_list[env][y0_m0] = 'Not Available'
-                    env_srcs.append(self.env_medium_list[env][y0_m0])
+                    print(f"******* Warning. Missing data of env:{env} on {y0_m0_d0}.")
+                    self.env_medium_list[env][y0_m0_d0] = 'Not Available'
+                    env_srcs.append(self.env_medium_list[env][y0_m0_d0])
                     
             env_unique_srcs = np.unique(env_srcs)
 
             env_collection_of_spans = np.empty(0)
-            for i in range(y_m_combs.shape[0]):
+#             for i in range(y_m_combs.shape[0]):
+            i = 0
+            while i < y_m_combs.shape[0]:
                 y0, m0 = y_m_combs[i]
-                y0_m0 = f'{y0:04d}-{m0:02d}'
+                y0_m0_d0 = datetime.strftime(datetime.strptime(f'{y0}-{m0}', '%Y-%m'), '%Y-%m-%d')
                 env_arrs = []
                 env_local_srcs = []
                 env_local_src_ids = []
-                y_m_list = []
-                for y, m in y_m_combs[i:(i+3)]:
-                    y_m = f'{y:04d}-{m:02d}'
-                    y_m_list.append(y_m)
-                    if self.env_medium_list[env][y_m] != 'Not Available':
-                        with rasterio.open(self.env_medium_list[env][y_m]) as env_raster:
-                            env_local_srcs.append(self.env_medium_list[env][y_m])
-                            env_local_src_ids.append(np.where(env_unique_srcs==self.env_medium_list[env][y_m])[0][0])
+                y_m_d_list = []
+                for y, m in y_m_combs[i:(i+self.month_span)]:
+                    y_m_d = datetime.strftime(datetime.strptime(f'{y}-{m}', '%Y-%m'), '%Y-%m-%d')
+                    y_m_d_list.append(y_m_d)
+                    if self.env_medium_list[env][y_m_d] != 'Not Available':
+                        with rasterio.open(self.env_medium_list[env][y_m_d]) as env_raster:
+                            env_local_srcs.append(self.env_medium_list[env][y_m_d])
+                            env_local_src_ids.append(np.where(env_unique_srcs==self.env_medium_list[env][y_m_d])[0][0])
                             env_arr_ = env_raster.read(1)
                             env_arr_ = np.where(env_arr_==self.no_data, np.nan, env_arr_)
                             env_arrs.append(env_arr_)
                             env_crs = env_raster.crs
                             env_transform = env_raster.transform
                     else:
-                        print(f"******* Warning. Data of env: {env} on {y_m} is not available.")
+                        print(f"******* Warning. Data of env: {env} on {y_m_d} is not available.")
 
                 if len(env_arrs) == 0:
-                    print(f"******* Error. Data missing on full span. ({'.'.join(y_m_list)})")
+                    print(f"******* Error. Data missing on full span. ({'.'.join(y_m_d_list)})")
                     assert(len(env_arrs)>0)
                     assert(len(env_arrs) == len(env_local_srcs))
                     assert(len(env_local_src_ids) == len(env_local_srcs))
 
-                fname_base = '.'.join(os.path.basename(self.env_medium_list[env][y0_m0]).split('.')[:-1])
+                fname_base = '.'.join(os.path.basename(self.env_medium_list[env][y0_m0_d0]).split('.')[:-1])
                 if fname_base == '':
-                    print(env, y0_m0, self.env_medium_list[env][y0_m0])
-                    fname_base = f'{env}_{y0_m0}_src_missing'
+                    print(env, y0_m0_d0, self.env_medium_list[env][y0_m0_d0])
+                    fname_base = f'{env}_{y0_m0_d0}_src_missing'
 
                 srcs_, cnts_ = np.unique(env_local_src_ids, return_counts = True)
                 postfixs = []
@@ -524,11 +535,11 @@ class RasterHelper:
 
                 path_name = f'{env_out_path}/{fname}'
 
-                if y0_m0 not in env_info['info'][env]:
-                    env_info['info'][env][y0_m0] = dict()
+                if y0_m0_d0 not in env_info['info'][env]:
+                    env_info['info'][env][y0_m0_d0] = dict()
 
-                env_info['info'][env][y0_m0]['tif_span_avg'] = path_name
-                env_info['info'][env][y0_m0]['tif_sources'] = list(env_unique_srcs[srcs_])
+                env_info['info'][env][y0_m0_d0]['tif_span_avg'] = path_name
+                env_info['info'][env][y0_m0_d0]['tif_sources'] = list(env_unique_srcs[srcs_])
                 env_arr_span_avg = np.nanmean(np.stack(env_arrs), axis=0)
                 
                 env_cell_avg = np.nanmean(np.stack(env_arrs))
@@ -553,6 +564,8 @@ class RasterHelper:
                     tif_out.write(env_arr_span_avg, 1)
 
                 env_collection_of_spans = np.concatenate((env_collection_of_spans, env_arr_span_avg[mask == 1]))
+                
+                i += self.month_step
 
             env_info['info'][env]['mean'] = np.mean(env_collection_of_spans)
             env_info['info'][env]['sd'] = np.std(env_collection_of_spans)
@@ -659,7 +672,7 @@ class RasterHelper:
             
             
         with open('./workspace/k_information.json', 'w') as f:
-            json.dump(k_info, f)               
+            json.dump(k_info, f)
         with open('./workspace/k_information_nok.json', 'w') as f:
             json.dump(nok_info, f)
             
@@ -832,8 +845,13 @@ class RasterHelper:
         
         # with PCA
         else:
+            # extent_binary
+            extent_binary = destination.GetRasterBand(1).ReadAsArray()
+            self.extent_binary_reshape_idx = extent_binary.reshape(-1) == 1
             for i, value in enumerate(conf['unique_class']):
-                dst_unique_value = np.where(dst_value == value, 1, 0)
+                
+                # only compute PCA with the value in extent_binary
+                dst_unique_value = np.where(dst_value[extent_binary == 1] == value, 1, 0)
                 if self.CCI_value[i] is None:
                     self.CCI_value[i] = dst_unique_value.reshape(-1)
                 else:
@@ -882,8 +900,10 @@ class RasterHelper:
                 if not os.path.exists('/'.join(medium_env_tif.split('/')[:-1])):
                     os.makedirs('/'.join(medium_env_tif.split('/')[:-1]))
                 
-                rst_value = self.CCI_PCA_value[i*num_cell:(i+1)*num_cell, n_com]
-                rst_value = rst_value.reshape(self.spatial_conf.y_num_cells, self.spatial_conf.x_num_cells)
+                rst_value_extent = self.CCI_PCA_value[i*num_cell:(i+1)*num_cell, n_com]
+                rst_value_fullsize = np.zeros([self.spatial_conf.y_num_cells * self.spatial_conf.x_num_cells, ])
+                rst_value_fullsize[self.extent_binary_reshape_idx] = rst_value_extent
+                rst_value = rst_value_fullsize.reshape(self.spatial_conf.y_num_cells, self.spatial_conf.x_num_cells)
                 dst_driver = gdal.GetDriverByName('GTiff')
                 dst_tif = dst_driver.Create(medium_env_tif, 
                                             destination.RasterXSize, 
@@ -906,7 +926,10 @@ class RasterHelper:
                 for pc in range(num_components):
                     if f'landcover_PC{pc:02d}' not in self.env_medium_list:
                         self.env_medium_list[f'landcover_PC{pc:02d}'] = {}
-                    self.env_medium_list[f'landcover_PC{pc:02d}'][f'{year:04d}-{month:02d}'] = os.path.join(medium_env_dir, f'landcover_PC{pc:02d}', f'landcover_PC{pc:02d}_{year:04d}.tif')
+                        
+                    # representation of yyyy-mm-dd
+                    y_m_d = datetime.strftime(datetime.strptime(f'{year}-{month}', '%Y-%m'), '%Y-%m-%d')
+                    self.env_medium_list[f'landcover_PC{pc:02d}'][y_m_d] = os.path.join(medium_env_dir, f'landcover_PC{pc:02d}', f'landcover_PC{pc:02d}_{year:04d}.tif')
                     
     def intersect_extents(self, tif):
         dst = gdal.Open(tif, gdalconst.GA_ReadOnly)
@@ -914,3 +937,8 @@ class RasterHelper:
             self.extent_binary_intersection = np.full((dst.RasterYSize, dst.RasterXSize), True)
         self.extent_binary_intersection = np.logical_and(~(dst.GetRasterBand(1).ReadAsArray() == dst.GetRasterBand(1).GetNoDataValue()), self.extent_binary_intersection)
         dst = None
+        
+    def log_env_medium_list(self):
+        medium_env_dir = 'medium'
+        with open(f'./{medium_env_dir}/env_medium_list.json', 'w') as f:
+            json.dump(self.env_medium_list, f)
