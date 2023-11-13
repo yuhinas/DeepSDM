@@ -101,6 +101,9 @@ sp_inf_virtual <- list()
 sp_inf_virtual[['dir_base']] <- sprintf("./virtual/%s/", version)
 sp_inf_virtual[['file_name']] <- list()
 
+# load species filter csv (real world)
+sp_filter <- read.csv('./workspace/species_data/occurrence_data/species_occurrence_filter.csv')
+
 for(i_sp in 1:virtual_conf$num_species){
   # i_sp <- 1
   sp <- paste0('sp', sprintf('%02d', i_sp))
@@ -201,9 +204,15 @@ for(i_sp in 1:virtual_conf$num_species){
                                    plot = F)
     save(sampleocc, file = file.path(dir_sp_time, sprintf('sampleocc_%s_%s_real.RData', sp, t)))
     points_real = sampleocc$sample.points
-    k2 <- raster(file.path(k_inf$dir_base, k_inf$file_name[[t]]))
-    values(k2)[values(k2) == 0] <- NA
-    points_real <- points_real[!is.na(raster::extract(k2, points_real[c('x', 'y')])), ]
+    
+    # generate k_rst
+    t_split <- strsplit(t, '-')[[1]]
+    sp_filter_time <- sp_filter[((sp_filter['year'] == t_split[1]) & (sp_filter['month'] == as.numeric(t_split[2]))), ]
+    k_rst <- raster(extent_binary)
+    idx <- cellFromXY(k_rst, sp_filter_time[, c('decimalLongitude', 'decimalLatitude')])
+    k_rst[idx] <- 1 # k_rst: 1 means with occurrence records; NA means no occurrence records
+    
+    points_real <- points_real[!is.na(raster::extract(k_rst, points_real[c('x', 'y')])), ]
     
     # save the long and lat of all points
     write.csv(points_real, file = file.path(dir_sp_time, sprintf('real_points_%s_%s.csv', sp, t)), row.names = F)
@@ -218,4 +227,4 @@ for(i_sp in 1:virtual_conf$num_species){
     sp_inf_virtual[['file_name']][[sp]][[t]] <- sprintf('%s/%s/real_map_%s_%s.tif', sp, t, sp, t)
   }
 }
-write_yaml(sp_inf_virtual, file = sprintf("./virtual/%s/species_information_virtual.yaml", version))
+write_yaml(sp_inf_virtual, file = sprintf("./virtual/%s/species_information_medium_virtual.yaml", version))
