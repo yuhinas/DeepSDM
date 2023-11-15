@@ -57,7 +57,7 @@ class LitDeepSDMData(pl.LightningDataModule):
             date_env_list = []
             y_m = '-'.join(date_.split('-')[:-1])
             for env_ in stage_env_list:
-                with rasterio.open(os.path.join(self.env_inf['dir_base'], f"{self.env_inf['info'][env_][y_m]['tif_span_avg']}")) as f:
+                with rasterio.open(os.path.join(self.env_inf['dir_base'], f"{self.env_inf['info'][env_][date_]['tif_span_avg']}")) as f:
                     img_ = ToTensor()(f.read(1)).cuda()
                 img = img_.where(self.geo_extent.cuda() == 1, torch.normal(self.env_inf['info'][env_]['mean'], self.env_inf['info'][env_]['sd'], img_.shape).cuda())
                 
