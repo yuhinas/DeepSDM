@@ -8,7 +8,8 @@ meta_json_files:
   
 # training configurations
 training_conf:
-  batch_size: 300
+  batch_size_train: 300
+  batch_size_predict: 200
   epochs: 300
   experiment_name: DeepSDM 43sp
   k2_p: 0.3333333333333333

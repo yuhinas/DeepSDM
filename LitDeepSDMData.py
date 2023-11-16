@@ -283,16 +283,16 @@ class LitDeepSDMData(pl.LightningDataModule):
         self.trainer.strategy.barrier()
         
     def train_dataloader(self):
-        return DataLoader(self.dataset_train, self.training_conf.batch_size, shuffle=True, num_workers=16, pin_memory=True)
+        return DataLoader(self.dataset_train, self.training_conf.batch_size_train, shuffle=True, num_workers=16, pin_memory=True)
 
     def val_dataloader(self):
         return [
-            DataLoader(self.dataset_train_on_val, self.training_conf.batch_size, shuffle=False, num_workers=16, pin_memory=True), # eval train dataset first
-            DataLoader(self.dataset_val, self.training_conf.batch_size, shuffle=False, num_workers=16, pin_memory=True), # Why shuffling here?
+            DataLoader(self.dataset_train_on_val, self.training_conf.batch_size_train, shuffle=False, num_workers=16, pin_memory=True), # eval train dataset first
+            DataLoader(self.dataset_val, self.training_conf.batch_size_train, shuffle=False, num_workers=16, pin_memory=True), # Why shuffling here?
         ]
 
     def smoothviz_dataloader(self):
-        return [DataLoader(dataset_smoothviz, batch_size=self.training_conf.batch_size, shuffle=False, num_workers=0) for dataset_smoothviz in self.datasets_smoothviz]
+        return [DataLoader(dataset_smoothviz, batch_size=self.training_conf.batch_size_train, shuffle=False, num_workers=0) for dataset_smoothviz in self.datasets_smoothviz]
 
     def predict_dataloader(
         self,
@@ -326,5 +326,5 @@ class LitDeepSDMData(pl.LightningDataModule):
                 )
             )
         
-        return [DataLoader(dataset_predict, batch_size=self.training_conf.batch_size, shuffle=False, num_workers=0) for dataset_predict in self.datasets_predict]
+        return [DataLoader(dataset_predict, batch_size=self.training_conf.batch_size_predict, shuffle=False, num_workers=0) for dataset_predict in self.datasets_predict]
     
