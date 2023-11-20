@@ -22,25 +22,27 @@ r_start <- as.numeric(args[1])
 # r_start <- 1
 r_end <- r_start + 199
 
-# specify timelog
-timelog <- 'aa7da675c700422fb351d235b936197f'
+# specify run_id
+run_id <- 'a10a969313594b52b2c405aae580f2a6'
 
 # create folder 
-dir_base_timelog <- file.path('predict_maxent', timelog)
-dir_timelog_png <- file.path(dir_base_timelog, 'png')
-create_folder(dir_timelog_png)
-dir_timelog_tif <- file.path(dir_base_timelog, 'tif')
-create_folder(dir_timelog_tif)
+dir_base_run_id <- file.path('predict_maxent', run_id)
+dir_run_id_png <- file.path(dir_base_run_id, 'png')
+create_folder(dir_run_id_png)
+dir_run_id_tif <- file.path(dir_base_run_id, 'tif')
+create_folder(dir_run_id_tif)
+dir_run_id_env_contribution <- file.path(dir_base_run_id, 'env_contribution')
+create_folder(dir_run_id_env_contribution)
 
 # load DeepSDM model configurations
-DeepSDM_conf_path <- sprintf('./predicts/%s/DeepSDM_conf.yaml', timelog)
+DeepSDM_conf_path <- file.path('predicts', run_id, 'DeepSDM_conf.yaml')
 DeepSDM_conf <- yaml.load_file(DeepSDM_conf_path)
 env_list <- sort(DeepSDM_conf$training_conf$env_list)
 
 # extent_binary -> 1:prediction area (land); 0:non-prediction area (sea)
 # trainval_split -> 1:training split; NA: validation split
 extent_binary <- raster(DeepSDM_conf$geo_extent_file)
-trainval_split <- raster('tmp/DeepSDM DEMO/20230911141642-0_partition_extent.tif')
+trainval_split <- raster(file.path('tmp', 'DeepSDM DEMO', '20230911141642-0_partition_extent.tif'))
 i_extent <- which(values(extent_binary) == 1) # cell index of prediction area
 i_trainsplit <- which(values(trainval_split) == 1) # cell index of training split
 i_valsplit <- which(is.na(values(trainval_split))) # cell index of validation split
@@ -75,11 +77,11 @@ df <- data.frame(sptime = character(),
                  p_seasonavg = numeric(), p_valpart_seasonavg = numeric(), p_trainpart_seasonavg = numeric(), pa_valpart_seasonavg = numeric(), pa_trainpart_seasonavg = numeric(),
                  p_all = numeric(), p_valpart_all = numeric(), p_trainpart_all = numeric(), pa_valpart_all = numeric(), pa_trainpart_all = numeric())
 
-
-files <- list.files(sprintf('predicts/%s/tif', timelog))
+files_path <- file.path('predicts', run_id, 'tif')
+files <- list.files(files_path)
 files <- sort(files)
 
-for(f in files[r_start:r_end]){
+for(f in files[r_start:min(r_end, length(files))]){
   # f <- 'Strix_nivicolum_2018-01-01_predict.tif'
   # f <- 'sp18_2018-09-01_predict.tif'
   # f <- files[1]
@@ -117,102 +119,36 @@ for(f in files[r_start:r_end]){
   
   #plotting
   color <- c('#fff5eb','#fee6ce','#fdd0a2','#fdae6b','#fd8d3c','#f16913','#d94801','#a63603','#7f2704')
-  # xmall <- try(maxent(x = envall, p = p_trainall, a = bg_trainall), silent = T)
-  # if(!is.character(xmall)){
-  #   
-  #   write.csv(xmall@results, 
-  #             file.path('for_testing', 
-  #                       paste('result', time_log, sep = '_'), 
-  #                       species, 
-  #                       paste(sptime, 'env_contribution_maxentall.csv', sep = '_')))
-  #   
-  #   pxall_all <- predict_maxent(envall, xmall)
-  #   
-  #   plot_result(time_log, sptime, pxall_all, extent10, pall, p12, p456, epoch, 'maxent_all_all')
-  #   maxentall_all_train <- calculate_roc(pxall_all, p_trainall, bg_trainall)
-  #   maxentall_all_test <- calculate_roc(pxall_all, p_testall, bg_testall)
-  #   
-  #   
-  #   pxall_12 <- predict_maxent(env12, xmall)
-  #   
-  #   plot_result(time_log, sptime, pxall_12, extent10, pall, p12, p456, epoch, 'maxent_all_12')
-  #   maxentall_12_train <- calculate_roc(pxall_12, p_train12, bg_train12)
-  #   maxentall_12_test <- calculate_roc(pxall_12, p_test12, bg_test12)
-  #   
-  #   
-  #   pxall_456 <- predict_maxent(env456, xmall)
-  #   
-  #   plot_result(time_log, sptime, pxall_456, extent10, pall, p12, p456, epoch, 'maxent_all_456')
-  #   maxentall_456_train <- calculate_roc(pxall_456, p_train456, bg_train456)
-  #   maxentall_456_test <- calculate_roc(pxall_456, p_test456, bg_test456)
-  #   
-  # }
-  # 
-  # xm12 <- try(maxent(x = env12, p = p_train12, a = bg_train12), silent = T)
-  # if(!is.character(xm12)){
-  #   
-  #   write.csv(xm12@results, 
-  #             file.path('for_testing', 
-  #                       paste('result', time_log, sep = '_'), 
-  #                       species, 
-  #                       paste(sptime, 'env_contribution_maxent12.csv', sep = '_')))
-  #   
-  #   px12_all <- predict_maxent(envall, xm12)
-  #   
-  #   plot_result(time_log, sptime, px12_all, extent10, pall, p12, p456, epoch, 'maxent_12_all')
-  #   maxent12_all_train <- calculate_roc(px12_all, p_trainall, bg_trainall)
-  #   maxent12_all_test <- calculate_roc(px12_all, p_testall, bg_testall)
-  #   
-  #   px12_12 <- predict_maxent(env12, xm12)
-  #   
-  #   plot_result(time_log, sptime, px12_12, extent10, pall, p12, p456, epoch, 'maxent_12_12')
-  #   maxent12_12_train <- calculate_roc(px12_12, p_train12, bg_train12)
-  #   maxent12_12_test <- calculate_roc(px12_12, p_test12, bg_test12)
-  #   
-  #   
-  #   px12_456 <- predict_maxent(env456, xm12)
-  #   
-  #   plot_result(time_log, sptime, px12_456, extent10, pall, p12, p456, epoch, 'maxent_12_456')
-  #   maxent12_456_train <- calculate_roc(px12_456, p_train456, bg_train456)
-  #   maxent12_456_test <- calculate_roc(px12_456, p_test456, bg_test456)
-  #   
-  # }
-  # 
-  # 
   xm_season <- try(maxent(x = env_season, p = xy_p_season_trainsplit, a = xy_pa_season_sample_trainsplit), silent = T)
   if(!is.character(xm_season)){
 
     write.csv(xm_season@results,
-              file.path(dir_base_timelog, paste(sptime, 'env_contribution_maxentseason.csv', sep = '_')))
-
-    # px456_all <- predict(envall, xm456)
-    # 
-    # plot_result(time_log, sptime, px456_all, extent10, pall, p12, p456, epoch, 'maxent_456_all')
-    # maxent456_all_train <- calculate_roc(px456_all, p_trainall, bg_trainall)
-    # maxent456_all_test <- calculate_roc(px456_all, p_testall, bg_testall)
-
-
-    # px456_12 <- predict(env12, xm456)
-    # 
-    # plot_result(time_log, sptime, px456_12, extent10, pall, p12, p456, epoch, 'maxent_456_12')
-    # maxent456_12_train <- calculate_roc(px456_12, p_train12, bg_train12)
-    # maxent456_12_test <- calculate_roc(px456_12, p_test12, bg_test12)
-
+              file.path(dir_run_id_env_contribution, sprintf('%s_env_contribution_maxentseason.csv', sptime)))
 
     px_season_season <- predict_maxent(env_season, xm_season)
 
-    plot_result(sptime, species, px_season_season, extent_binary, xy_p_season, xy_p_season, xy_p_season, 'maxent_season_season', dir_timelog_png, dir_timelog_tif, timelog)
+    plot_result(sptime, species, px_season_season, extent_binary, xy_p_season, xy_p_season, xy_p_season, 'maxent_season_season', dir_run_id_png, dir_run_id_tif, run_id)
     maxent_season_season_train <- calculate_roc(px_season_season, xy_p_season_trainsplit, xy_pa_season_sample_trainsplit)
     maxent_season_season_val <- calculate_roc(px_season_season, xy_p_season_valsplit, xy_pa_season_sample_valsplit)
   }
-  deepsdm <- raster::raster(sprintf('predicts/%s/tif/%s', timelog, f))
+  # if maxent predictions have existed, run the code below
+  #------------------------------------------------------------------------------------
+  # maxent_path <- file.path(dir_run_id_tif, sprintf('%s_maxent_season_season_%s.tif', sptime, run_id))
+  # if(file.exists(maxent_path)){
+  #   px_season_season <- raster::raster(maxent_path)
+  #   maxent_season_season_train <- calculate_roc(px_season_season, xy_p_season_trainsplit, xy_pa_season_sample_trainsplit)
+  #   maxent_season_season_val <- calculate_roc(px_season_season, xy_p_season_valsplit, xy_pa_season_sample_valsplit)
+  # }
+
+  deepsdm_path <- file.path('predicts', run_id, 'tif', f)
+  deepsdm <- raster::raster(deepsdm_path)
   # deepsdmall_all_train <- try(calculate_roc(deepsdm, p_trainall, bg_trainall))
   # deepsdmall_all_test <- try(calculate_roc(deepsdm, p_testall, bg_testall))
   # deepsdmall_12_train <- try(calculate_roc(deepsdm, p_train12, bg_train12))
   # deepsdmall_12_test <- try(calculate_roc(deepsdm, p_test12, bg_test12))
   deepsdm_all_season_train <- try(calculate_roc(deepsdm, xy_p_season_trainsplit, xy_pa_season_sample_trainsplit))
   deepsdm_all_season_val <- try(calculate_roc(deepsdm, xy_p_season_valsplit, xy_pa_season_sample_valsplit))
-  plot_result_deepsdm(sptime, species, deepsdm, extent_binary, xy_p_season, xy_p_season, xy_p_season, 'deepsdm_all_season', dir_timelog_png, timelog)
+  # plot_result_deepsdm(sptime, species, deepsdm, extent_binary, xy_p_season, xy_p_season, xy_p_season, 'deepsdm_all_season', dir_run_id_png, run_id)
   
   df[nrow(df)+1, ] <- c(sptime,
                         maxent_season_season_val, maxent_season_seasonavg_val, maxent_season_all_val,
@@ -228,4 +164,5 @@ for(f in files[r_start:r_end]){
                         p_all, p_valpart_all, p_trainpart_all, pa_valpart_all, pa_trainpart_all)
 }
 
-write.csv(df, sprintf('predicts_maxent/auc_result_%s.csv', r_start), row.names = FALSE)
+output_csv_path <- file.path(dir_base_run_id, sprintf('auc_result_%s.csv', r_start))
+write.csv(df, output_csv_path, row.names = FALSE)

@@ -3,12 +3,15 @@ library(virtualspecies)
 library(dplyr)
 library(yaml)
 library(rjson)
-library(yaml)
 
 set.seed(42)
 # functions
-generate_envall <- function(env_list, extent_binary, medium_inf){
+generate_envall <- function(env_list, extent_binary, medium_inf, version_path){
   df <- data.frame('env' = character(0), 'mean' = numeric(0), 'sd' = numeric(0))
+  envavg_path <- file.path(version_path, 'env_avg')
+  if(!dir.exists(envavg_path)){
+    dir.create(envavg_path, recursive = TRUE)
+  }
   for(env in env_list){
     result_env <- raster(extent_binary)
     values(result_env) <- 0
@@ -20,14 +23,14 @@ generate_envall <- function(env_list, extent_binary, medium_inf){
     }
     df[nrow(df)+1, ] <- c(env, mean(value, na.rm = TRUE), sd(value, na.rm = TRUE))
     result_env <- result_env / length(time)
-    writeRaster(result_env, file.path('virtual', version, sprintf('%s_avg.tif', env)), overwrite = T)
+    writeRaster(result_env, file.path(envavg_path, sprintf('%s_avg.tif', env)), overwrite = T)
   }
-  write.csv(df, file.path('virtual', version, 'env_inf.csv'), row.names = FALSE)
+  write.csv(df, file.path(envavg_path, 'env_inf.csv'), row.names = FALSE)
   
   # load last 1 yr average data
-  df <- read.csv(file.path('virtual', version, 'env_inf.csv'), row.names = 1)
+  df <- read.csv(file.path(envavg_path, 'env_inf.csv'), row.names = 1)
   for(env in env_list){
-    env_rst <- (raster(file.path('virtual', version, sprintf('%s_avg.tif', env))) - df[env, 'mean']) / df[env, 'sd']
+    env_rst <- (raster(file.path(envavg_path, sprintf('%s_avg.tif', env))) - df[env, 'mean']) / df[env, 'sd']
     values(env_rst)[values(extent_binary) == 0] <- NA
     assign(paste0(env, '_all'), env_rst)
   }
@@ -71,13 +74,15 @@ generate_convertToPA <- function(virtual_conf, random_sp_time, random_method, ra
   return(random_sp_time_pa)
 }
 
-virtual_conf <- yaml.load_file('./virtual_conf.yaml')
+virtual_conf <- yaml.load_file('virtual_conf.yaml')
 extent_binary <- raster(virtual_conf$extent_binary)
 version <- virtual_conf$version
-if(!dir.exists(sprintf('virtual/%s', version))){
-  dir.create(sprintf('virtual/%s', version), recursive = TRUE)
+
+version_path <- file.path('virtual', version)
+if(!dir.exists(version_path)){
+  dir.create(version_path, recursive = TRUE)
 }
-write_yaml(virtual_conf, sprintf('virtual/%s/virtual_conf_%s.yaml', version, version))
+write_yaml(virtual_conf, file.path(version_path, sprintf('virtual_conf_%s.yaml', version)))
 
 # load environmental information 
 env_inf <- fromJSON(file = virtual_conf$meta_json_files$env_inf)
@@ -92,17 +97,19 @@ time <- virtual_conf$time
 prevalence <- virtual_conf$prevalence
 
 # generate env_all
-output <- generate_envall(env_list, extent_binary, medium_inf)
+output <- generate_envall(env_list, extent_binary, medium_inf, version_path)
 df <- output$df
 env_all <- output$env_all
 
 # species information (virtual species)
-sp_inf_virtual <- list()
-sp_inf_virtual[['dir_base']] <- sprintf("./virtual/%s/", version)
-sp_inf_virtual[['file_name']] <- list()
+# sp_inf_bias_virtual: maps with geological bias
+# sp_inf_true_virtual: maps without any bias
+sp_inf_bias_virtual <- list(dir_base = file.path('virtual', version, 'medium'), file_name = list())
+sp_inf_true_virtual <- list(dir_base = file.path('virtual', version, 'medium'), file_name = list())
 
 # load species filter csv (real world)
-sp_filter <- read.csv('./workspace/species_data/occurrence_data/species_occurrence_filter.csv')
+sp_filter_path <- file.path('workspace', 'species_data', 'occurrence_data', 'species_occurrence_filter.csv')
+sp_filter <- read.csv(sp_filter_path)
 
 for(i_sp in 1:virtual_conf$num_species){
   # i_sp <- 1
@@ -120,17 +127,18 @@ for(i_sp in 1:virtual_conf$num_species){
                                 species.prevalence = prevalence[((i_sp-1)%%length(prevalence) + 1)],
                                 plot = T)
   # create folders
-  dir_sp <- sprintf('virtual/%s/%s', version, sp)
-  if(!dir.exists(dir_sp)){
-    dir.create(dir_sp)
+  sp_path <- file.path(version_path, 'medium', sp)
+  if(!dir.exists(sp_path)){
+    dir.create(sp_path, recursive = TRUE)
   }  
-  sp_inf_virtual[['file_name']][[sp]] <- list()
+  sp_inf_bias_virtual[['file_name']][[sp]] <- list()
+  sp_inf_true_virtual[['file_name']][[sp]] <- list()
   
   # if random time env is set, log the time_random
   if(virtual_conf$env_pca == 'random'){
     random_sp[['time_used']] <- env_pca$time_random
   }
-  save(random_sp, file = file.path(dir_sp, sprintf('%s.RData', sp)))
+  save(random_sp, file = file.path(sp_path, sprintf('%s.RData', sp)))
   
   random_means <- random_sp$details$means
   random_sds <- random_sp$details$sds
@@ -153,9 +161,9 @@ for(i_sp in 1:virtual_conf$num_species){
     names(env_time) <- env_list
     
     # create folders
-    dir_sp_time <- sprintf('virtual/%s/%s/%s', version, sp, t)
-    if(!dir.exists(dir_sp_time)){
-      dir.create(dir_sp_time)
+    sp_time_path <- file.path(sp_path, t)
+    if(!dir.exists(sp_time_path)){
+      dir.create(sp_time_path)
     }  
     # generate data based on the PCA result and the environment of specific time
     random_sp_time <- generateSpFromPCA(env_time, 
@@ -163,15 +171,15 @@ for(i_sp in 1:virtual_conf$num_species){
                                         sds = random_sds, 
                                         pca = random_pca, 
                                         plot = F)
-    save(random_sp_time, file = file.path(dir_sp_time, sprintf('%s_%s.RData', sp, t)))
+    save(random_sp_time, file = file.path(sp_time_path, sprintf('%s_%s.RData', sp, t)))
     
     # convert continuous map to presence-absence map
     random_sp_time_pa <- generate_convertToPA(virtual_conf, random_sp_time, random_method, random_beta, random_alpha, random_cutoff)
-    save(random_sp_time_pa, file = file.path(dir_sp_time, sprintf('%s_%s_pa.RData', sp, t)))
+    save(random_sp_time_pa, file = file.path(sp_time_path, sprintf('%s_%s_pa.RData', sp, t)))
     pa_raster <- raster(random_sp_time_pa$pa.raster)
     values(pa_raster)[values(extent_binary) == 0] <- -9999
     NAvalue(pa_raster) <- -9999
-    writeRaster(pa_raster, file.path(dir_sp_time, sprintf('%s_%s_pa.tif', sp, t)), overwrite = T)
+    writeRaster(pa_raster, file.path(sp_time_path, sprintf('%s_%s_pa.tif', sp, t)), overwrite = T)
     
     # CONDITION I: a random sampling based on the specific percentage of all grids of Taiwan
     for(p in virtual_conf$pa_percentage){  
@@ -181,19 +189,19 @@ for(i_sp in 1:virtual_conf$num_species){
                                      n = round(p * max_value), 
                                      type = 'presence-absence', 
                                      plot = F)
-      save(sampleocc, file = file.path(dir_sp_time, sprintf('sampleocc_%s_%s_%s.RData', sp, t, p)))
-      points_ideal <- sampleocc$sample.points
+      save(sampleocc, file = file.path(sp_time_path, sprintf('sampleocc_true_%s_%s_p%s.RData', sp, t, p)))
+      points_true_p <- sampleocc$sample.points
       
       # save the long and lat of all points
-      write.csv(points_ideal, file = file.path(dir_sp_time, sprintf('ideal_points_%s_%s_%s.csv', sp, t, p)), row.names = F)
+      write.csv(points_true_p, file = file.path(sp_time_path, sprintf('occpoints_true_%s_%s_p%s.csv', sp, t, p)), row.names = F)
       
       # save the raster of the occurrence
-      occurrence_ideal <- raster(random_sp_time_pa$pa.raster)
-      values(occurrence_ideal)[!is.na(values(occurrence_ideal))] <- 0
-      occurrence_ideal[cellFromXY(occurrence_ideal, points_ideal)] <- points_ideal$Observed
-      values(occurrence_ideal)[values(extent_binary) == 0] <- -9999
-      NAvalue(occurrence_ideal) <- -9999
-      writeRaster(occurrence_ideal, file.path(dir_sp_time, sprintf('ideal_map_%s_%s_%s.tif', sp, t, p)), overwrite = T)
+      occurrence_true <- raster(random_sp_time_pa$pa.raster)
+      values(occurrence_true)[!is.na(values(occurrence_true))] <- 0
+      occurrence_true[cellFromXY(occurrence_true, points_true_p)] <- points_true_p$Observed
+      values(occurrence_true)[values(extent_binary) == 0] <- -9999
+      NAvalue(occurrence_true) <- -9999
+      writeRaster(occurrence_true, file.path(sp_time_path, sprintf('true_map_%s_%s_p%s.tif', sp, t, p)), overwrite = T)
     }
     
     # CONDITION II: biased sampling based on real situation. Only the grids with observation in real world count. 
@@ -202,8 +210,8 @@ for(i_sp in 1:virtual_conf$num_species){
                                    n = max_value, 
                                    type = 'presence-absence', 
                                    plot = F)
-    save(sampleocc, file = file.path(dir_sp_time, sprintf('sampleocc_%s_%s_real.RData', sp, t)))
-    points_real = sampleocc$sample.points
+    save(sampleocc, file = file.path(sp_time_path, sprintf('sampleocc_bias_%s_%s.RData', sp, t)))
+    points_bias = sampleocc$sample.points
     
     # generate k_rst
     t_split <- strsplit(t, '-')[[1]]
@@ -212,19 +220,21 @@ for(i_sp in 1:virtual_conf$num_species){
     idx <- cellFromXY(k_rst, sp_filter_time[, c('decimalLongitude', 'decimalLatitude')])
     k_rst[idx] <- 1 # k_rst: 1 means with occurrence records; NA means no occurrence records
     
-    points_real <- points_real[!is.na(raster::extract(k_rst, points_real[c('x', 'y')])), ]
+    points_bias <- points_bias[!is.na(raster::extract(k_rst, points_bias[c('x', 'y')])), ]
     
     # save the long and lat of all points
-    write.csv(points_real, file = file.path(dir_sp_time, sprintf('real_points_%s_%s.csv', sp, t)), row.names = F)
+    write.csv(points_bias, file = file.path(sp_time_path, sprintf('occpoints_bias_%s_%s.csv', sp, t)), row.names = F)
     
     # save the raster of the occurrence
-    occurrence_real <- raster(random_sp$pa.raster)
-    values(occurrence_real)[!is.na(values(occurrence_real))] <- 0
-    occurrence_real[cellFromXY(occurrence_real, points_real)] <- points_real$Observed
-    values(occurrence_real)[values(extent_binary) == 0] <- -9999
-    NAvalue(occurrence_real) <- -9999
-    writeRaster(occurrence_real, file.path(dir_sp_time, sprintf('real_map_%s_%s.tif', sp, t)), overwrite = T)
-    sp_inf_virtual[['file_name']][[sp]][[t]] <- sprintf('%s/%s/real_map_%s_%s.tif', sp, t, sp, t)
+    occurrence_bias <- raster(random_sp$pa.raster)
+    values(occurrence_bias)[!is.na(values(occurrence_bias))] <- 0
+    occurrence_bias[cellFromXY(occurrence_bias, points_bias)] <- points_bias$Observed
+    values(occurrence_bias)[values(extent_binary) == 0] <- -9999
+    NAvalue(occurrence_bias) <- -9999
+    writeRaster(occurrence_bias, file.path(sp_time_path, sprintf('bias_map_%s_%s.tif', sp, t)), overwrite = T)
+    sp_inf_bias_virtual[['file_name']][[sp]][[t]] <- file.path(sp, t, sprintf('bias_map_%s_%s.tif', sp, t))
+    sp_inf_true_virtual[['file_name']][[sp]][[t]] <- file.path(sp, t, sprintf('%s_%s_pa.tif', sp, t))
   }
 }
-write_yaml(sp_inf_virtual, file = sprintf("./virtual/%s/species_information_medium_virtual.yaml", version))
+write_yaml(sp_inf_bias_virtual, file = file.path(version_path, 'species_information_medium_bias_virtual.yaml'))
+write_yaml(sp_inf_true_virtual, file = file.path(version_path, 'species_information_medium_true_virtual.yaml'))
