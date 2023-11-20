@@ -1096,12 +1096,12 @@ class RasterHelperVirtual:
         if realworld_json is None:
             realworld_json = './workspace/species_information.json'
         if virtual_json is None:
-            virtual_json = f'./virtual/{version}/species_information_only_virtual_{version}.json'
+            virtual_json = f'./virtual/{version}/species_information_reorganize_bias_virtual.yaml'
 
         with open(realworld_json, 'r') as f:
             realworld = json.load(f)
         with open(virtual_json, 'r') as f:
-            virtual = json.load(f)
+            virtual = yaml.load(f, Loader = yaml.FullLoader)
 
         common_path = os.path.commonpath([realworld['dir_base'], virtual['dir_base']])
         unique_path_realworld = os.path.relpath(realworld['dir_base'], common_path)
