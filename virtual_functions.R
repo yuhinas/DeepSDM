@@ -1,5 +1,5 @@
 # generate all-time environment layers
-generate_envall <- function(env_list, extent_binary, medium_inf, version_path){
+generate_envall <- function(env_list, env_list_nonnormalized, extent_binary, medium_inf, version_path){
   df <- data.frame('env' = character(0), 'mean' = numeric(0), 'sd' = numeric(0))
   envavg_path <- file.path(version_path, 'env_avg')
   if(!dir.exists(envavg_path)){
@@ -23,7 +23,11 @@ generate_envall <- function(env_list, extent_binary, medium_inf, version_path){
   # load last 1 yr average data
   df <- read.csv(file.path(envavg_path, 'env_inf.csv'), row.names = 1)
   for(env in env_list){
-    env_rst <- (raster(file.path(envavg_path, sprintf('%s_avg.tif', env))) - df[env, 'mean']) / df[env, 'sd']
+    if(env %in% env_list_nonnormalized){
+      env_rst <- raster(file.path(envavg_path, sprintf('%s_avg.tif', env)))
+    }else{
+      env_rst <- (raster(file.path(envavg_path, sprintf('%s_avg.tif', env))) - df[env, 'mean']) / df[env, 'sd']
+    }
     values(env_rst)[values(extent_binary) == 0] <- NA
     assign(paste0(env, '_all'), env_rst)
   }
@@ -42,8 +46,12 @@ generate_env_pca <- function(virtual_conf, env_all, time, env_list, df, medium_i
   }
   if(virtual_conf$env_pca == 'random'){
     time_random <- sample(time, 1)
-    rsts_random <- lapply(env_list, function(env_list) {
-      rst_normalize <- (raster(medium_inf[[env_list]][[time_random]]) - df[env_list, 'mean']) / df[env_list, 'sd']
+    rsts_random <- lapply(env_list, function(env_item) {
+      if(env_item %in% virtual_conf$env_nonnormalized){
+        rst_normalize <- raster(medium_inf[[env_item]][[time_random]])
+      }else{
+        rst_normalize <- (raster(medium_inf[[env_item]][[time_random]]) - df[env_item, 'mean']) / df[env_item, 'sd']
+      }
       values(rst_normalize)[is.na(values(rst_normalize))] <- 0
       values(rst_normalize)[values(extent_binary) == 0] <- NA
       return(rst_normalize)

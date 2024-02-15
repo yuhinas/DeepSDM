@@ -1,4 +1,4 @@
-version: v2
+version: v3_duplicate
 extent_binary: ./workspace/extent_binary.tif
 meta_json_files:
   env_inf: ./workspace/env_information.json
@@ -16,12 +16,33 @@ env_list:
  - landcover_PC02
  - landcover_PC03
  - landcover_PC04
+ - clt
+ - cmi
+ - hurs
+ - pet
+ - rsds
+ - sfcWind
+ - tasmax
+ - tasmin
+ - vpd
 env_list_non_normalized:
  - landcover_PC00
  - landcover_PC01
  - landcover_PC02
  - landcover_PC03
 time: 
+ - '2016-01-01'
+ - '2016-02-01'
+ - '2016-03-01'
+ - '2016-04-01'
+ - '2016-05-01'
+ - '2016-06-01'
+ - '2016-07-01'
+ - '2016-08-01'
+ - '2016-09-01'
+ - '2016-10-01'
+ - '2016-11-01'
+ - '2016-12-01'
  - '2017-01-01'
  - '2017-02-01'
  - '2017-03-01'
@@ -48,7 +69,7 @@ time:
  - '2018-12-01'
  
 num_species: 21
-pa_percentage: [0.1, 0.5]
+pa_percentage: [0.1]
 prevalence: [0.01, 0.03, 0.05, 0.1, 0.2, 0.3, 0.5]
 virtualspecies_conf:
   approach: pca
