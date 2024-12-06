@@ -162,3 +162,15 @@ cython_debug/
 
 # handcraft
 .DS_Store
+
+# v2
+medium/
+mlruns/
+plots/
+predicts/
+workspace/
+tmp/
+predict_maxent/
+renv/
+
+
