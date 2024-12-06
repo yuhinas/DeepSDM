@@ -4,7 +4,7 @@ from torch.utils.data import Dataset
 
 class TaxaDataset_smoothviz(Dataset):
     def __init__(self, idx_species_date, env_stack, embedding, label_stack, subsample_height, subsample_width, num_smoothviz_steps):
-        
+            
         self.species_date = label_stack['species_date'][idx_species_date] #'Acridotheres_cristatellus_2000-01-01'之類的
         self.species = label_stack['species'][idx_species_date]
         self.date = label_stack['date'][idx_species_date]
@@ -37,13 +37,13 @@ class TaxaDataset_smoothviz(Dataset):
         env_new = []
         for i in range(len(env)):
             env_new.append(env[i:(i+1), :, :].cuda())
+
 #             env_new.append(F.pad(env[i:(i+1), :, :], 
 #                                  (self.subsample_width, 2 * self.subsample_width, self.subsample_height, 2 * self.subsample_height), 
 #                                  mode = 'replicate').to(torch.float))
         self.env = F.pad(torch.cat(env_new),
                          (self.subsample_width, 2 * self.subsample_width, self.subsample_height, 2 * self.subsample_height), 
                          mode = 'replicate') #.to(torch.float)
-    
         self.env = self.env.cpu()
         torch.cuda.empty_cache()
         

@@ -13,6 +13,7 @@ import os
 import rasterio
 import yaml
 from pytorch_lightning.callbacks import ModelCheckpoint
+import shutil
 
 
 class LitUNetSDM(pl.LightningModule):
@@ -216,18 +217,18 @@ class LitUNetSDM(pl.LightningModule):
         
             # predicted p on those points of occurrence
             pred_epoch_p_sample = pred_epoch[true_epoch_eq1] #.detach() #.cpu().tolist()
-            
+
 #             print(pred_epoch_a_all.shape, pred_epoch_a_sample.shape, pred_epoch_p_sample.shape)
 
-            
+
             agg.nop.append(nop_epoch)
 #             agg.pred_a_all.append(pred_epoch_a_all)
             agg.pred_a_sample.append(pred_epoch_a_sample)
             agg.pred_p_sample.append(pred_epoch_p_sample)
-        
+
 #         torch.cuda.synchronize()
 #         print(f'Agg {dataset} results takes {time.time() - start_time} seconds.')
-        
+
         return agg
         
     def on_validation_epoch_end(self):
@@ -238,8 +239,8 @@ class LitUNetSDM(pl.LightningModule):
             self.log_img()
             torch.cuda.synchronize()
             print(f'log_img: {time.time() - start_time} seconds ..................')
-            
-            
+
+
 #         print(f"{self.trainer.global_rank} is blocked here.")
         self.trainer.strategy.barrier()
 #         print(f"{self.trainer.global_rank} is resumed here.")
@@ -419,7 +420,6 @@ class LitUNetSDM(pl.LightningModule):
             #算rocauc
             #製作pseudo-absence
             label = dataloader_smoothviz.dataset.label.to(self.device) #.detach().to(dev)
-
             
             ### REWRITE THIS PART
             #y, x = torch.where((extent == 1) & (label == 0))[0], torch.where((extent == 1) & (label == 0))[1] # val部份的所有點位（只有陸地）
@@ -431,7 +431,7 @@ class LitUNetSDM(pl.LightningModule):
             bg[y[random_indice], x[random_indice]] = 1 # bg這個影像中，如果是選到的pseudo-absence值是1; 其餘是0
 
 #             try:
-            
+
             label_one_trian_ = result[(label == 1) & (partition == 1)]
 #             assert(len(label_one_trian_) > 0)
             if len(label_one_trian_) > 0:
@@ -457,6 +457,7 @@ class LitUNetSDM(pl.LightningModule):
         
             ### Plot map and occurrence points
             # start_time = time.time()
+                        
             result_masked = result.where(extent == 1, nan_tensor)
             result_masked_npy = result_masked.cpu().numpy()
 
@@ -476,12 +477,22 @@ class LitUNetSDM(pl.LightningModule):
 
             # black points: presence points in training area
             # green points: presence points in validation area
-            ax.plot(np.where((label.cpu().numpy() == 1) & (partition.cpu().numpy() == 1))[1], np.where((label.cpu().numpy() == 1) & (partition.cpu().numpy() == 1))[0], '.', color = 'black')
-            ax.plot(np.where((label.cpu().numpy() == 1) & (partition.cpu().numpy() == 0))[1], np.where((label.cpu().numpy() == 1) & (partition.cpu().numpy() == 0))[0], '.', color = 'green')
+            label_cpu = label.cpu().numpy()
+            partition_cpu = partition.cpu().numpy()
+            ax.plot(np.where((label_cpu == 1) & (partition_cpu == 1))[1], np.where((label_cpu == 1) & (partition_cpu == 1))[0], '.', color = 'black')
+            ax.plot(np.where((label_cpu == 1) & (partition_cpu == 0))[1], np.where((label_cpu == 1) & (partition_cpu == 0))[0], '.', color = 'green')
 
             #title_ = f'{species_date[0]}_ep{self.current_epoch:04d}'
-            date_ = species_date[0].split('_')[-1]
+
+
+#             date_ = species_date[0].split('_')[-1]
+            # 8/30 修改
+            date_ = dataloader_smoothviz.dataset.date.split('_')[-1]
+            
             ax.set_title(date_)
+            
+            plt.draw()
+            plt.pause(0.001)
 #             plt.axis('off')        
 #             wandb.log({f"{species_time[0]}": [wandb.Image(plt, mode = 'L')]}, 
 #                      step = epoch)  
@@ -496,7 +507,11 @@ class LitUNetSDM(pl.LightningModule):
                 self.logger.experiment.log_figure(figure = fig, artifact_file = f'{sp_}_ep{self.current_epoch:04d}_smoothviz.png', run_id = self.logger.run_id)
 
 #             print(time.time() - start_time)
-            
+
+            ax.clear()
+        
+        
+        
         auc_val = sum(roc_epoch_val) / len(roc_epoch_val) #sum([i for i in roc_epoch_val if i > 0]) / len([i for i in roc_epoch_val if i > 0])
         auc_train = sum(roc_epoch_train) / len(roc_epoch_train) # sum([i for i in roc_epoch_train if i > 0]) / len([i for i in roc_epoch_train if i > 0])
         
@@ -515,6 +530,8 @@ class LitUNetSDM(pl.LightningModule):
             os.makedirs(dir_out)
         with open(f'{output_dir}/DeepSDM_conf.yaml', 'w') as f:
             yaml.dump(vars(self.DeepSDM_conf), f)
+        shutil.copy(self.DeepSDM_conf.meta_json_files['env_inf'], f'{output_dir}/env_information.json')
+        shutil.copy(self.DeepSDM_conf.meta_json_files['sp_inf'], f'{output_dir}/sp_information.json')
         
         dir_tif_out = f'{output_dir}/tif'
         if not os.path.isdir(dir_tif_out):
@@ -540,7 +557,7 @@ class LitUNetSDM(pl.LightningModule):
 
         height_original = label_stack_predict['tensor'].shape[1]
         width_original = label_stack_predict['tensor'].shape[2]
-         
+
 #         dataset_train = self.trainer.datamodule.train_dataloader().dataset
 #         partition = dataset_train.split_tif[:height_original, :width_original].to(self.device) #1是train部分;0是非train部分(含陸地和海)
 

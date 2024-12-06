@@ -51,7 +51,7 @@ class EmbeddingModel(nn.Module):
 
 ####################################################################################
 # TODO: NEED VERY HEAVY REFACTORING
-####################################################################################
+# ###################################################################################
 class TrainEmbedding:
     def __init__(self, embedding_conf, CreateDataset, EmbeddingModel, 
                                     output_dir='./workspace/species_data',

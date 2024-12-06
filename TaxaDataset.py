@@ -14,7 +14,7 @@ class TaxaDataset(Dataset):
         self.species_list = label_stack['species']
         self.date_list = label_stack['date']
         self.embedding = embedding
-        self.split = torch.tensor(np.loadtxt(('./workspace/partition.txt'), delimiter = ',')).to(torch.int)
+        self.split = torch.tensor(np.loadtxt(os.path.join('./workspace', 'partition.txt'), delimiter = ',')).to(torch.int)
         self.training_conf = SimpleNamespace(**DeepSDM_conf.training_conf)
 
         if trainorval == 'train':
@@ -47,7 +47,7 @@ class TaxaDataset(Dataset):
 #         torch.cuda.synchronize()
 #         starttime = time.time()
 #         print('########## STACKS ##########')
-        
+
         # 根據split切分後的小部分的長寬位置
         split_tif = torch.zeros(self.height_new, self.width_new)
         split_element = []
@@ -91,7 +91,7 @@ class TaxaDataset(Dataset):
         torch.cuda.empty_cache()
 
         self.k2_stack_date = k2_stack['date']
-        
+
 #         torch.cuda.synchronize()
 #         print(time.time() - starttime)
 #         print('########## STACKS ##########')

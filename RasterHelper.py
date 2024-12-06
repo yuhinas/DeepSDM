@@ -12,6 +12,7 @@ from matplotlib import pyplot as plt
 import re
 from sklearn.decomposition import PCA
 import yaml
+import hashlib
 
 class RasterHelper:
     
@@ -60,10 +61,10 @@ class RasterHelper:
         self.spatial_conf = spatial_conf
         
         in_ds = gdal.Open(input_env, gdalconst.GA_ReadOnly)
-        
+
 #         in_nodata = in_ds.GetRasterBand(1).GetNoDataValue()
 #         assert(in_nodata is not None)
-        
+
         _, xres, _, _, _, yres = in_ds.GetGeoTransform()
         in_proj = in_ds.GetProjection()
 
@@ -84,7 +85,7 @@ class RasterHelper:
         digit_parts = str(self.spatial_conf.out_res).split('.')
         assert(len(digit_parts) == 2)
         self.num_digits_after_decimal = min(len(digit_parts[1]), 6)
-        
+
 #         self.spatial_conf.x_start = self.res_rounder(self.res_rounder(x_start / self.spatial_conf.out_res, 0) * self.spatial_conf.out_res)
 #         self.spatial_conf.y_start = self.res_rounder(self.res_rounder(y_start / self.spatial_conf.out_res, 0) * self.spatial_conf.out_res)
 
@@ -460,7 +461,8 @@ class RasterHelper:
             info = dict(),
             dir_base = './'
         )        
-        y_m_combs = np.array(np.meshgrid(np.arange(self.date_start.year, self.date_end.year + 1, dtype=int), np.arange(1, 13, dtype=int))).T.reshape(-1, 2)
+        date_range = pd.date_range(start=self.date_start, end=self.date_end, freq='MS')
+        y_m_combs = np.array([[date.year, date.month] for date in date_range])
 
         with rasterio.open('./workspace/extent_binary.tif') as extent_binary_raster:
             mask = extent_binary_raster.read(1)
@@ -531,6 +533,11 @@ class RasterHelper:
                     for src_i in range(len(srcs_)):
                         postfixs.append(f'{srcs_[src_i]}.{cnts_[src_i]}')
                     fname = f'{fname_base}_srcs{"and".join(postfixs)}_timespan_avg.tif'
+                    
+                    # operation if fname is too long 
+                    if len(fname) > 200:
+                        fname_hash = hashlib.md5("and".join(postfixs).encode()).hexdigest()
+                        fname = f'{fname_base}_srcs_{fname_hash}_timespan_avg.tif'
                 else:
                     fname = f'{fname_base}.tif'
 
@@ -575,8 +582,8 @@ class RasterHelper:
             json.dump(env_info, f)        
 
 #         return env_info
-        
-    
+
+
     #########################################
         
     def create_k_info(self):
@@ -943,12 +950,12 @@ class RasterHelper:
         medium_env_dir = 'medium'
         with open(f'./{medium_env_dir}/env_medium_list.json', 'w') as f:
             json.dump(self.env_medium_list, f)
+
             
-            
-            
-            
-#########################################################################################################
-            
+
+
+# ########################################################################################################
+
 class RasterHelperVirtual:
     
     def __init__(self, DeepSDM_conf, virtual_conf):
@@ -1122,4 +1129,4 @@ class RasterHelperVirtual:
         with open(combine_sp_inf_path, 'w') as f:
             json.dump(combine_dict, f)
         self.combine_sp_inf = combine_dict
-        
+

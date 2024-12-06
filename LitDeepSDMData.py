@@ -6,17 +6,15 @@ import json
 import rasterio
 from TaxaDataset_smoothviz import TaxaDataset_smoothviz
 from TaxaDataset import TaxaDataset
-import matplotlib.pyplot as plt
 import time
 import pytorch_lightning as pl
-import mlflow
 import yaml
 from types import SimpleNamespace
 
 class LitDeepSDMData(pl.LightningDataModule):
-    def __init__ (self, 
-                  yaml_conf = './DeepSDM_conf.yaml', 
-                  tmp_path = './tmp'):
+    def __init__(self, 
+                 yaml_conf = './DeepSDM_conf.yaml', 
+                 tmp_path = './tmp'):
         
         super().__init__()
         
@@ -276,10 +274,10 @@ class LitDeepSDMData(pl.LightningDataModule):
         print(f'({self.trainer.global_rank}) Data smoothviz loaded in {time.time() - start_time} seconds.')
 
         ##########################################################
-        
+
 #         if self.trainer.global_rank == 0:
 #             self._save_trainval_split(self.dataset_train)
-            
+
         self.trainer.strategy.barrier()
         
     def train_dataloader(self):
@@ -301,21 +299,19 @@ class LitDeepSDMData(pl.LightningDataModule):
     ):
         
         env_list = self.training_conf.env_list
-        
         self._load_meta_list(
             date_list, 
             env_list, 
             species_list,
             'predict',
         )
-
         self.env_stack_predict = torch.load(f'{self.tmp_path}/env_stack_predict.pth', map_location='cpu')
         self.embedding_predict = torch.load(f'{self.tmp_path}/embedding_predict.pth', map_location='cpu')
         self.label_stack_predict = torch.load(f'{self.tmp_path}/label_stack_predict.pth', map_location='cpu')
         self.k2_stack_predict = torch.load(f'{self.tmp_path}/k2_stack_predict.pth', map_location='cpu')
-        
         self.datasets_predict = []
         print ("Setting up dataset for prediction...")
+
         for idx_species_date in range(len(self.label_stack_predict['species_date'])):
 
             self.datasets_predict.append(
@@ -325,6 +321,13 @@ class LitDeepSDMData(pl.LightningDataModule):
                     self.training_conf.subsample_height, self.training_conf.subsample_width, self.training_conf.num_predict_steps
                 )
             )
-        
-        return [DataLoader(dataset_predict, batch_size=self.training_conf.batch_size_predict, shuffle=False, num_workers=0) for dataset_predict in self.datasets_predict]
-    
+        return [
+            DataLoader(
+                dataset_predict, 
+                batch_size=self.training_conf.batch_size_predict, 
+                shuffle=False, 
+                num_workers=0
+            ) 
+            for dataset_predict in self.datasets_predict
+        ]
+

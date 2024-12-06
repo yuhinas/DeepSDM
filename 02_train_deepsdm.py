@@ -17,7 +17,7 @@ DeepSDM_conf = SimpleNamespace(**DeepSDM_conf)
 # Define timelog
 timelog = time.strftime('%Y%m%d%H%M%S', time.localtime())
 
-### LOGGER
+# ## LOGGER
 # Use mlflow to auto logging pytorch lightning everything
 # mlflow.set_experiment(conf.experiment_name)
 # mlflow.pytorch.autolog(disable = True)
@@ -70,5 +70,5 @@ trainer = pl.Trainer(
 #     trainer.fit(model, datamodule=deep_sdm_data)
 trainer.fit(model, datamodule = deep_sdm_data)
 
-    
+
 # run `mlflow ui` in the console at the path that contains 'mlruns' for monitoring the trainig

@@ -57,7 +57,7 @@ plot_result_deepsdm <- function(sptime, xm, extent_binary, p, log_info, dir_time
 
 # function of auc_roc calculations
 calculate_roc <- function(px, p, bg){
-  if(nrow(p) == 0){
+  if(nrow(p) == 0 | nrow(bg) == 0){
     return(-9999)
   }else{
     pred_1 <- raster::extract(px, p)
@@ -67,6 +67,61 @@ calculate_roc <- function(px, p, bg){
     roc <- roc(c(actual_1, actual_0), c(pred_1, pred_0))
     return(roc$auc[1])
   }
+}
+
+# function of other indicator calculations
+calculate_indicator <- function(rst){
+  # 如果沒有presence points就直接return 0
+  if(nrow(xy_p_season_trainsplit) == 0 | nrow(xy_p_season_valsplit) == 0 | nrow(xy_pa_season_sample_trainsplit) == 0 | nrow(xy_pa_season_sample_valsplit) == 0){
+    return(c(-9999, -9999, -9999))
+  }
+  
+  train_pred_1 <- raster::extract(rst, xy_p_season_trainsplit) %>% as.numeric()
+  train_pred_0 <- raster::extract(rst, xy_pa_season_sample_trainsplit)
+  train_actual_1 <- rep(1, nrow(xy_p_season_trainsplit))
+  train_actual_0 <- rep(0, nrow(xy_pa_season_sample_trainsplit))
+  roc_obj_train <- roc(c(train_actual_1, train_actual_0), c(train_pred_1, train_pred_0))
+  
+  # 提取最佳靈敏度和特異性，計算 TSS
+  best_threshold_train <- coords(roc_obj_train, 'best', ret=c('threshold')) %>% pull() %>% median()
+
+  # 根據最佳閾值進行分類
+  val_pred_1 <- raster::extract(rst, xy_p_season_valsplit)
+  val_pred_0 <- raster::extract(rst, xy_pa_season_sample_valsplit)
+  val_actual_1 <- rep(1, nrow(xy_p_season_valsplit))
+  val_actual_0 <- rep(0, nrow(xy_pa_season_sample_valsplit))
+  val_predicted_classes <- ifelse(c(val_pred_1, val_pred_0) >= best_threshold_train, 1, 0)
+  
+  # 生成混淆矩陣
+  predicted_factor <- factor(val_predicted_classes, levels = c(0, 1))
+  actual_factor <- factor(c(val_actual_1, val_actual_0), levels = c(0, 1))
+  confusion_matrix <- table(predicted_factor, actual_factor)
+  
+  # 計算TSS
+  # 計算 Sensitivity 和 Specificity
+  TP <- confusion_matrix[2, 2]  # True Positive
+  TN <- confusion_matrix[1, 1]  # True Negative
+  FP <- confusion_matrix[2, 1]  # False Positive
+  FN <- confusion_matrix[1, 2]  # False Negative
+  
+  # 計算靈敏度（Sensitivity）和特異性（Specificity）和 Precision
+  sensitivity <- TP / (TP + FN)
+  specificity <- TN / (TN + FP)
+  precision <- TP / (TP + FP)
+  N <- length(val_pred_0) + length(val_pred_1)
+  p_0 <- (TP + TN) / N
+  p_e <- ((TP + FP) * (TP + FN) + (TN + FP) * (TN + FN)) / N^2
+  
+  # 計算 TSS
+  TSS <- sensitivity + specificity - 1
+  
+  # 計算 F1
+  f1 <- 2 * precision * sensitivity / (precision + sensitivity)
+  
+  # 計算 kappa
+  kappa <- (p_0 - p_e) / (1 - p_e)
+  
+  return(c(TSS, kappa, f1))
 }
 
 # load env season layers
@@ -136,16 +191,23 @@ set_default_variable <- function(default_value = -9999){
   maxent_all_season_train <<- default_value
   maxent_all_season_all <<- default_value
   
+  maxent_TSS <<- default_value
+  deepsdm_TSS <<- default_value
+  maxent_kappa <<- default_value
+  deepsdm_kappa <<- default_value
+  maxent_f1 <<- default_value
+  deepsdm_f1 <<- default_value
+  
   p_season <<- default_value
   p_valpart_season <<- default_value
   p_trainpart_season <<- default_value
   pa_valpart_season <<- default_value
   pa_trainpart_season <<- default_value
-  p_season <<- nrow(xy_p_season)
-  p_valpart_season <<- nrow(xy_p_season_valsplit)
-  p_trainpart_season <<- nrow(xy_p_season_trainsplit)
-  pa_valpart_season <<- nrow(xy_pa_season_sample_valsplit)
-  pa_trainpart_season <<- nrow(xy_pa_season_sample_trainsplit)
+  p_season <<- ifelse(exists('xy_p_season'), nrow(xy_p_season), default_value)
+  p_valpart_season <<- ifelse(exists('xy_p_season_valsplit'), nrow(xy_p_season_valsplit), default_value)
+  p_trainpart_season <<- ifelse(exists('xy_p_season_trainsplit'), nrow(xy_p_season_trainsplit), default_value)
+  pa_valpart_season <<- ifelse(exists('xy_pa_season_sample_valsplit'), nrow(xy_p_season_trainsplit), default_value)
+  pa_trainpart_season <<- ifelse(exists('xy_pa_season_sample_trainsplit'), nrow(xy_p_season_trainsplit), default_value)
 }
 set_default_variable_allseason <- function(default_value = -9999){
   maxent_allseason_allseason_val <<- default_value
@@ -157,31 +219,36 @@ set_default_variable_allseason <- function(default_value = -9999){
   p_trainpart_allseason <<- default_value
   pa_valpart_allseason <<- default_value
   pa_trainpart_allseason <<- default_value
-  p_allseason <<- nrow(xy_p_allseason)
-  p_valpart_allseason <<- nrow(xy_p_allseason_valsplit)
-  p_trainpart_allseason <<- nrow(xy_p_allseason_trainsplit)
-  pa_valpart_allseason <<- nrow(xy_pa_allseason_sample_valsplit)
-  pa_trainpart_allseason <<- nrow(xy_pa_allseason_sample_trainsplit)
+  
+  p_allseason <<- ifelse(exists('xy_p_allseason'), nrow(xy_p_allseason), default_value)
+  p_valpart_allseason <<- ifelse(exists('xy_p_allseason_valsplit'), nrow(xy_p_allseason_valsplit), default_value)
+  p_trainpart_allseason <<- ifelse(exists('xy_p_allseason_trainsplit'), nrow(xy_p_allseason_trainsplit), default_value)
+  pa_valpart_allseason <<- ifelse(exists('xy_pa_allseason_sample_valsplit'), nrow(xy_pa_allseason_sample_valsplit), default_value)
+  pa_trainpart_allseason <<- ifelse(exists('xy_pa_allseason_sample_trainsplit'), nrow(xy_pa_allseason_sample_trainsplit), default_value) 
 }
 set_default_variable_all <- function(default_value = -9999){
   maxent_all_all_val <<- default_value
   maxent_all_all_train <<- default_value
   maxent_all_all_all <<- default_value
+  deepsdm_all_all_val <<- default_value
+  deepsdm_all_all_train <<- default_value
+  deepsdm_all_all_all <<- default_value
   
   p_all <<- default_value
   p_valpart_all <<- default_value
   p_trainpart_all <<- default_value
   pa_valpart_all <<- default_value
   pa_trainpart_all <<- default_value
-  p_all <<- nrow(xy_p_all)
-  p_valpart_all <<- nrow(xy_p_all_valsplit)
-  p_trainpart_all <<- nrow(xy_p_all_trainsplit)
-  pa_valpart_all <<- nrow(xy_pa_all_sample_valsplit)
-  pa_trainpart_all <<- nrow(xy_pa_all_sample_trainsplit)
+  
+  p_all <<- ifelse(exists('xy_p_all'), nrow(xy_p_all), default_value) 
+  p_valpart_all <<- ifelse(exists('xy_p_all_valsplit'), nrow(xy_p_all_valsplit), default_value)
+  p_trainpart_all <<- ifelse(exists('xy_p_all_trainsplit'), nrow(xy_p_all_trainsplit), default_value)
+  pa_valpart_all <<- ifelse(exists('xy_pa_all_sample_valsplit'), nrow(xy_pa_all_sample_valsplit), default_value)
+  pa_trainpart_all <<- ifelse(exists('xy_pa_all_sample_trainsplit'), nrow(xy_pa_all_sample_trainsplit), default_value)
 }
 
 # generate presence and pseudo-absence / absence point data of one season
-generate_points <- function(){
+generate_points <- function(num_pa = 10000){
   occ_rst_path <- file.path('.', sp_info$dir_base, sp_info$file_name[[species]][[time]])
   occ_rst <- raster::raster(occ_rst_path)
   i_p_occ_rst <- which(values(occ_rst) == 1)
@@ -192,7 +259,11 @@ generate_points <- function(){
   
   i_pa_season <- intersect(i_pa_occ_rst, i_extent)
   xy_pa_season <- xyFromCell(occ_rst, i_pa_season)
-  i_pa_season_sample <- sample(i_pa_season, 10000)
+  if(num_pa == 'num_p'){
+    i_pa_season_sample <- sample(i_pa_season, nrow(xy_p_season))
+  }else{
+    i_pa_season_sample <- sample(i_pa_season, num_pa)
+  }
   xy_pa_season_sample <<- xyFromCell(occ_rst, i_pa_season_sample)
   xy_pa_season_sample_trainsplit <<- xyFromCell(occ_rst, intersect(i_pa_season_sample, i_trainsplit))
   xy_pa_season_sample_valsplit <<- xyFromCell(occ_rst, intersect(i_pa_season_sample, i_valsplit))
@@ -225,7 +296,7 @@ generate_points_allseason <- function(){
 }
 
 # generate presence and pseudo-absence / absence point data of all
-generate_points_all <- function(){
+generate_points_all <- function(date_list_all){
   
   occ_rst_path <- lapply(date_list_all, function(time){
     file.path('.', sp_info$dir_base, sp_info$file_name[[species]][[time]])
