@@ -12,9 +12,11 @@ predict_maxent <- function(env, xm){
 }
 
 # function of plotting maxent results
-plot_result <- function(sptime, xm, extent_binary, p, log_info, dir_timelog_png, dir_timelog_tif, timelog){
-  png(file.path(dir_timelog_png, 
-                sprintf('%s_%s_%s.png', sptime, log_info, timelog)),
+plot_result <- function(sp, xm, extent_binary, p, log_info, dir_timelog_png_sp, dir_timelog_tif_sp, timelog, time = NULL){
+  sptime <- if (is.null(time)) sp else sprintf('%s_%s', sp, time)
+  png(file.path(dir_timelog_png_sp, 
+                sprintf('%s_%s_%s.png', sptime, log_info, timelog)
+               ),
       width = 2000,
       height = 2000)
   
@@ -29,15 +31,31 @@ plot_result <- function(sptime, xm, extent_binary, p, log_info, dir_timelog_png,
   
   points(p, pch = 16, col = 'red', cex = 1.5)
   dev.off()
-  writeRaster(xm * extent_binary, 
-              file.path(dir_timelog_tif, 
-                        sprintf('%s_%s_%s.tif', sptime, log_info, timelog)), 
-              overwrite = T)
+#   writeRaster(xm * extent_binary, 
+#               file.path(dir_timelog_tif_sp, 
+#                         sprintf('%s_%s_%s.tif', sptime, log_info, timelog)), 
+#               overwrite = T)
+  # HDF5 文件路徑
+  h5_file_path <- file.path(dir_timelog_tif_sp, sprintf('%s.h5', sp))
+
+  # 打開或創建 HDF5 文件
+  h5_file <- H5File$new(h5_file_path, mode = "a")  # 'a' 模式
+
+  # 確保 dataset 名稱不重複
+  if (sptime %in% h5_file$ls()) {
+      h5_file[[sptime]]$delete()  # 刪除現有 dataset
+  }
+
+  # 寫入數據
+  h5_file[[sptime]] <- xm * extent_binary  # 存儲數據
+
+  # 關閉文件
+  h5_file$close()
 }
 
 # function of plotting deepsdm result
-plot_result_deepsdm <- function(sptime, xm, extent_binary, p, log_info, dir_timelog_png, timelog){
-  png(file.path(dir_timelog_png, 
+plot_result_deepsdm <- function(sptime, xm, extent_binary, p, log_info, dir_timelog_png_sp, timelog){
+  png(file.path(dir_timelog_png_sp, 
                 sprintf('%s_%s_%s.png', sptime, log_info, timelog)),
       width = 2000,
       height = 2000)
