@@ -23,8 +23,8 @@ exp_id <- '115656750127464383'
 dir_base_run_id <- file.path('predict_maxent', run_id)
 dir_run_id_png <- file.path(dir_base_run_id, 'png', 'all')
 create_folder(dir_run_id_png)
-dir_run_id_tif <- file.path(dir_base_run_id, 'tif', 'all')
-create_folder(dir_run_id_tif)
+dir_run_id_h5 <- file.path(dir_base_run_id, 'h5', 'all')
+create_folder(dir_run_id_h5)
 dir_run_id_env_contribution <- file.path(dir_base_run_id, 'env_contribution', 'all')
 create_folder(dir_run_id_env_contribution)
 dir_maxent_model <- file.path(dir_base_run_id, 'maxent_model')
@@ -92,8 +92,8 @@ for(species in species_list[r_start:min(r_end, length(species_list))]){
   
   dir_run_id_png_sp <- file.path(dir_run_id_png, species)
   create_folder(dir_run_id_png_sp)
-  dir_run_id_tif_sp <- file.path(dir_run_id_tif, species)
-  create_folder(dir_run_id_tif_sp)
+  dir_run_id_h5_sp <- file.path(dir_run_id_h5, species)
+  create_folder(dir_run_id_h5_sp)
     
   result <- tryCatch({
     generate_points_all(date_list_train)  # 呼叫函數
@@ -112,7 +112,7 @@ for(species in species_list[r_start:min(r_end, length(species_list))]){
   set_default_variable_all()
     
   maxent_all_all_exists <- FALSE
-  maxent_all_all_path <- file.path(dir_run_id_tif_sp, sprintf('%s_maxent_all_all_%s.tif', species, run_id))
+  maxent_all_all_path <- file.path(dir_run_id_h5_sp, sprintf('%s_maxent_all_all_%s.tif', species, run_id))
   maxent_all_all_exists <- file.exists(maxent_all_all_path)
   if(!maxent_all_all_exists){
       xm_all <- try(maxent(x = env_all, p = xy_p_all_trainsplit, a = xy_pa_all_sample_trainsplit), silent = T)
@@ -122,7 +122,7 @@ for(species in species_list[r_start:min(r_end, length(species_list))]){
                   file.path(dir_run_id_env_contribution, sprintf('%s_env_contribution_maxentall.csv', species)))
         maxent_all_all <- predict_maxent(env_all, xm_all)
         maxent_all_all_exists <- TRUE
-        plot_result(species, maxent_all_all, extent_binary, xy_p_all, 'maxent_all_all', dir_run_id_png_sp, dir_run_id_tif_sp, run_id, time)
+        plot_result(species, maxent_all_all, extent_binary, xy_p_all, 'maxent_all_all', dir_run_id_png_sp, dir_run_id_h5_sp, run_id, time)
         maxent_all_all_train <- calculate_roc(maxent_all_all, xy_p_all_trainsplit, xy_pa_all_sample_trainsplit)
         maxent_all_all_val <- calculate_roc(maxent_all_all, xy_p_all_valsplit, xy_pa_all_sample_valsplit)
         maxent_all_all_all <- calculate_roc(maxent_all_all, xy_p_all, xy_pa_all_sample)
@@ -160,7 +160,7 @@ for(species in species_list[r_start:min(r_end, length(species_list))]){
         
       # maxent
       # check if maxent predictions have existed
-      maxent_all_season_path <- file.path(dir_run_id_tif_sp, sprintf('%s_maxent_all_season_%s.tif', sp_season, run_id))
+      maxent_all_season_path <- file.path(dir_run_id_h5_sp, sprintf('%s_maxent_all_season_%s.tif', sp_season, run_id))
       maxent_all_season_exists <- file.exists(maxent_all_season_path)
       if(maxent_all_season_exists){
           maxent_all_season_exists <- TRUE
@@ -168,7 +168,7 @@ for(species in species_list[r_start:min(r_end, length(species_list))]){
       }else{
           maxent_all_season <- predict_maxent(env_season, xm_all)
           maxent_all_season_exists <- TRUE
-          plot_result(sp_season, maxent_all_season, extent_binary, xy_p_season, 'maxent_all_season', dir_run_id_png_sp, dir_run_id_tif_sp, run_id, time)
+          plot_result(sp_season, maxent_all_season, extent_binary, xy_p_season, 'maxent_all_season', dir_run_id_png_sp, dir_run_id_h5_sp, run_id, time)
       }
       maxent_all_season_train <- calculate_roc(maxent_all_season, xy_p_season_trainsplit, xy_pa_season_sample_trainsplit)
       maxent_all_season_val <- calculate_roc(maxent_all_season, xy_p_season_valsplit, xy_pa_season_sample_valsplit)

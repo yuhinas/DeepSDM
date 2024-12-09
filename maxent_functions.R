@@ -12,7 +12,7 @@ predict_maxent <- function(env, xm){
 }
 
 # function of plotting maxent results
-plot_result <- function(sp, xm, extent_binary, p, log_info, dir_timelog_png_sp, dir_timelog_tif_sp, timelog, time = NULL){
+plot_result <- function(sp, xm, extent_binary, p, log_info, dir_timelog_png_sp, dir_timelog_h5_sp, timelog, time = NULL){
   sptime <- if (is.null(time)) sp else sprintf('%s_%s', sp, time)
   png(file.path(dir_timelog_png_sp, 
                 sprintf('%s_%s_%s.png', sptime, log_info, timelog)
@@ -36,7 +36,7 @@ plot_result <- function(sp, xm, extent_binary, p, log_info, dir_timelog_png_sp, 
 #                         sprintf('%s_%s_%s.tif', sptime, log_info, timelog)), 
 #               overwrite = T)
   # HDF5 文件路徑
-  h5_file_path <- file.path(dir_timelog_tif_sp, sprintf('%s.h5', sp))
+  h5_file_path <- file.path(dir_timelog_h5_sp, sprintf('%s.h5', sp))
 
   # 打開或創建 HDF5 文件
   h5_file <- H5File$new(h5_file_path, mode = "a")  # 'a' 模式
