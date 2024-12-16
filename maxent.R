@@ -122,7 +122,7 @@ for(species in species_list[r_start:min(r_end, length(species_list))]){
                   file.path(dir_run_id_env_contribution, sprintf('%s_env_contribution_maxentall.csv', species)))
         maxent_all_all <- predict_maxent(env_all, xm_all)
         maxent_all_all_exists <- TRUE
-        plot_result(species, maxent_all_all, extent_binary, xy_p_all, 'maxent_all_all', dir_run_id_png_sp, dir_run_id_h5_sp, run_id, time)
+        plot_result(species, maxent_all_all, extent_binary, xy_p_all, 'maxent_all_all', dir_run_id_png_sp, dir_run_id_h5_sp, run_id)
         maxent_all_all_train <- calculate_roc(maxent_all_all, xy_p_all_trainsplit, xy_pa_all_sample_trainsplit)
         maxent_all_all_val <- calculate_roc(maxent_all_all, xy_p_all_valsplit, xy_pa_all_sample_valsplit)
         maxent_all_all_all <- calculate_roc(maxent_all_all, xy_p_all, xy_pa_all_sample)
@@ -171,7 +171,7 @@ for(species in species_list[r_start:min(r_end, length(species_list))]){
       }else{
           maxent_all_season <- predict_maxent(env_season, xm_all)
           maxent_all_season_exists <- TRUE
-          plot_result(sp_season, maxent_all_season, extent_binary, xy_p_season, 'maxent_all_season', dir_run_id_png_sp, dir_run_id_h5_sp, run_id, time)
+          plot_result(species, maxent_all_season, extent_binary, xy_p_season, 'maxent_all_season', dir_run_id_png_sp, dir_run_id_h5_sp, run_id, time)
       }
       maxent_all_season_train <- calculate_roc(maxent_all_season, xy_p_season_trainsplit, xy_pa_season_sample_trainsplit)
       maxent_all_season_val <- calculate_roc(maxent_all_season, xy_p_season_valsplit, xy_pa_season_sample_valsplit)

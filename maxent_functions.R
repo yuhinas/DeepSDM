@@ -17,19 +17,19 @@ plot_result <- function(sp, xm, extent_binary, p, log_info, dir_timelog_png_sp, 
   png(file.path(dir_timelog_png_sp, 
                 sprintf('%s_%s_%s.png', sptime, log_info, timelog)
                ),
-      width = 2000,
-      height = 2000)
+      width = 500,
+      height = 1000)
   
   plot(xm * extent_binary,
        main = sprintf('%s_%s_%s', sptime, log_info, timelog),
        axes = FALSE,
        box = FALSE,
        legend = FALSE,
-       cex.main = 4,
+       cex.main = 0.7,
        col = color,
        breaks = seq(0, 1, 0.125))
   
-  points(p, pch = 16, col = 'red', cex = 1.5)
+  points(p, pch = 16, col = 'red', cex = 1)
   dev.off()
 #   writeRaster(xm * extent_binary, 
 #               file.path(dir_timelog_tif_sp, 
@@ -47,7 +47,7 @@ plot_result <- function(sp, xm, extent_binary, p, log_info, dir_timelog_png_sp, 
   }
 
   # 寫入數據
-  h5_file[[sptime]] <- xm * extent_binary  # 存儲數據
+  h5_file[[sptime]] <- t(as.matrix(xm * extent_binary))
 
   # 關閉文件
   h5_file$close()
@@ -57,19 +57,19 @@ plot_result <- function(sp, xm, extent_binary, p, log_info, dir_timelog_png_sp, 
 plot_result_deepsdm <- function(sptime, xm, extent_binary, p, log_info, dir_timelog_png_sp, timelog){
   png(file.path(dir_timelog_png_sp, 
                 sprintf('%s_%s_%s.png', sptime, log_info, timelog)),
-      width = 2000,
-      height = 2000)
+      width = 500,
+      height = 1000)
   
   plot(xm * extent_binary,
        main = sprintf('%s_%s_%s', sptime, log_info, timelog),
        axes = FALSE,
        box = FALSE,
        legend = FALSE,
-       cex.main = 4,
+       cex.main = 0.7,
        col = color,
        breaks = seq(0, 1, 0.125))
   
-  points(p, pch = 16, col = 'red', cex = 1.5)
+  points(p, pch = 16, col = 'red', cex = 1)
   dev.off()
 }
 
