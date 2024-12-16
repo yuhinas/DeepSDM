@@ -117,7 +117,7 @@ sudo Rscript -e 'install.packages("yaml")'
    sudo Rscript -e 'install.packages("rJava")'
    ```
 
-7. Install the `hdf5r` package:
-   ```bash
-   sudo Rscript -e 'install.packages("hdf5r")'
-   ```
+## 9. Install `hdf5r`
+```bash
+sudo Rscript -e 'install.packages("hdf5r")'
+```
