@@ -1,3 +1,4 @@
+library(hdf5r)
 library(raster)
 library(dismo)
 library(pROC)
@@ -5,7 +6,6 @@ library(tidyverse)
 library(rjson)
 library(yaml)
 library(rJava)
-library(hdf5r)
 set.seed(42)
 
 source('maxent_functions.R')
@@ -84,7 +84,7 @@ env_all <- load_env_allseason(env_list, env_info, date_list_train, DeepSDM_conf)
 
 r_start <- as.numeric(args[1])
 # r_start <- 121
-r_end <- r_start + 0
+r_end <- r_start + 2
 for(species in species_list[r_start:min(r_end, length(species_list))]){
   # species <- species_list[121]
   # species <- 'Alauda_gulgula'
@@ -112,7 +112,7 @@ for(species in species_list[r_start:min(r_end, length(species_list))]){
   set_default_variable_all()
     
   maxent_all_all_exists <- FALSE
-  maxent_all_all_path <- file.path(dir_run_id_h5_sp, sprintf('%s_maxent_all_all_%s.tif', species, run_id))
+  maxent_all_all_path <- file.path(dir_run_id_h5_sp, sprintf('%s.h5', species))
   maxent_all_all_exists <- file.exists(maxent_all_all_path)
   if(!maxent_all_all_exists){
       xm_all <- try(maxent(x = env_all, p = xy_p_all_trainsplit, a = xy_pa_all_sample_trainsplit), silent = T)
@@ -128,7 +128,10 @@ for(species in species_list[r_start:min(r_end, length(species_list))]){
         maxent_all_all_all <- calculate_roc(maxent_all_all, xy_p_all, xy_pa_all_sample)
       }
   }else{
-    maxent_all_all <- raster::raster(maxent_all_all_path)
+#     maxent_all_all <- raster::raster(maxent_all_all_path)
+    h5_file <- H5File$new(maxent_all_all_path, mode = "r")
+    maxent_all_all <- h5_file[[species]]
+    h5_file$close()
     maxent_all_all_exists <- TRUE
     load(file.path(dir_maxent_model, sprintf('%s_all.RData', species)))
     maxent_all_all_train <- calculate_roc(maxent_all_all, xy_p_all_trainsplit, xy_pa_all_sample_trainsplit)
