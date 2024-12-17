@@ -68,7 +68,7 @@ species_list <- sort(DeepSDM_conf$training_conf$species_list_train)
 # all: the whole time span
 # AAA_BBB_CCC_DDD -> In DDD split, auc_roc score of using BBB env data for training and CCC env data for prediction with model AAA
 # eg. 'maxent_season_season_val' means In validation split, auc_roc score of using 'season' env data for training and predicting with 'season' data with maxent model
-df_all_season <- data.frame(sptime = character(),
+df_all_season <- data.frame(spdate = character(),
                             maxent_all_season_val = numeric(), maxent_all_season_train = numeric(), maxent_all_season_all = numeric(), 
                             deepsdm_all_season_val = numeric(), deepsdm_all_season_train = numeric(), deepsdm_all_season_all = numeric(), 
                             maxent_TSS = numeric(), deepsdm_TSS = numeric(), maxent_kappa = numeric(), deepsdm_kappa = numeric(), maxent_f1 = numeric(), deepsdm_f1 = numeric(), 
@@ -112,8 +112,9 @@ for(species in species_list[r_start:min(r_end, length(species_list))]){
   set_default_variable_all()
     
   maxent_all_all_exists <- FALSE
-  maxent_all_all_path <- file.path(dir_run_id_h5_sp, sprintf('%s.h5', species))
-  maxent_all_all_exists <- file.exists(maxent_all_all_path)
+  maxent_h5_path <- file.path(dir_run_id_h5_sp, sprintf('%s.h5', species))
+  maxent_all_all_exists <- check_dataset_in_h5(maxent_h5_path, 'all')
+
   if(!maxent_all_all_exists){
       xm_all <- try(maxent(x = env_all, p = xy_p_all_trainsplit, a = xy_pa_all_sample_trainsplit), silent = T)
       save(xm_all, file = file.path(dir_maxent_model, sprintf('%s_all.RData', species)))
@@ -127,11 +128,8 @@ for(species in species_list[r_start:min(r_end, length(species_list))]){
         maxent_all_all_val <- calculate_roc(maxent_all_all, xy_p_all_valsplit, xy_pa_all_sample_valsplit)
         maxent_all_all_all <- calculate_roc(maxent_all_all, xy_p_all, xy_pa_all_sample)
       }
-  }else{
-#     maxent_all_all <- raster::raster(maxent_all_all_path)
-    h5_file <- H5File$new(maxent_all_all_path, mode = "r")
-    maxent_all_all <- h5_file[[species]]
-    h5_file$close()
+  }else{      
+    maxent_all_all <- h5dataset_to_raster(maxent_h5_path, 'all')
     maxent_all_all_exists <- TRUE
     load(file.path(dir_maxent_model, sprintf('%s_all.RData', species)))
     maxent_all_all_train <- calculate_roc(maxent_all_all, xy_p_all_trainsplit, xy_pa_all_sample_trainsplit)
@@ -142,11 +140,11 @@ for(species in species_list[r_start:min(r_end, length(species_list))]){
                                         maxent_all_all_val, maxent_all_all_train, maxent_all_all_all, 
                                         p_all, p_valpart_all, p_trainpart_all, pa_valpart_all, pa_trainpart_all)
     
-  for(time in date_list_predict){
-    # time <- date_list_predict[1]
-    # time <- '2018-12-01'
-    print(paste('start', species, time))
-    sp_season <- paste0(species, '_', time)
+  for(date in date_list_predict){
+    # date <- date_list_predict[1]
+    # date <- '2018-12-01'
+    print(paste('start', species, date))
+    sp_season <- paste0(species, '_', date)
     set_default_variable()
       
     maxent_all_season_exists <- FALSE
@@ -159,19 +157,17 @@ for(species in species_list[r_start:min(r_end, length(species_list))]){
       set_default_variable()
         
       # load env layers of season
-      env_season <- load_env_season(env_list, env_info, time, DeepSDM_conf)
+      env_season <- load_env_season(env_list, env_info, date, DeepSDM_conf)
         
       # maxent
       # check if maxent predictions have existed
-      maxent_all_season_path <- file.path(dir_run_id_h5_sp, sprintf('%s_maxent_all_season_%s.tif', sp_season, run_id))
-      maxent_all_season_exists <- file.exists(maxent_all_season_path)
+      maxent_all_season_exists <- check_dataset_in_h5(maxent_h5_path, date)
       if(maxent_all_season_exists){
-          maxent_all_season_exists <- TRUE
-          maxent_all_season <- raster::raster(maxent_all_season_path)
+        maxent_all_season <- h5dataset_to_raster(maxent_h5_path, date)
       }else{
           maxent_all_season <- predict_maxent(env_season, xm_all)
           maxent_all_season_exists <- TRUE
-          plot_result(species, maxent_all_season, extent_binary, xy_p_season, 'maxent_all_season', dir_run_id_png_sp, dir_run_id_h5_sp, run_id, time)
+          plot_result(species, maxent_all_season, extent_binary, xy_p_season, 'maxent_all_season', dir_run_id_png_sp, dir_run_id_h5_sp, run_id, date)
       }
       maxent_all_season_train <- calculate_roc(maxent_all_season, xy_p_season_trainsplit, xy_pa_season_sample_trainsplit)
       maxent_all_season_val <- calculate_roc(maxent_all_season, xy_p_season_valsplit, xy_pa_season_sample_valsplit)
@@ -182,10 +178,11 @@ for(species in species_list[r_start:min(r_end, length(species_list))]){
       maxent_f1 <- maxent_other_indicator[3]
         
       # deepsdm
-      deepsdm_file <- paste(species, time, 'predict.tif', sep = '_')
-      deepsdm_path <- file.path('predicts', run_id, 'tif', deepsdm_file)
-      deepsdm_all_season <- try(raster::raster(deepsdm_path), silent = TRUE)
-      if (!is.character(deepsdm_all_season)){
+      deepsdm_h5_path <- file.path('predicts', run_id, 'h5', species, sprintf('%s.h5', species))
+      deepsdm_all_season_exists <- check_dataset_in_h5(deepsdm_h5_path, date)
+      
+      if (deepsdm_all_season_exists){
+        deepsdm_all_season <- h5dataset_to_raster(deepsdm_h5_path, date)
         plot_result_deepsdm(sp_season, deepsdm_all_season, extent_binary, xy_p_season, 'deepsdm_all_season', dir_run_id_png_sp, run_id)
         deepsdm_all_season_train <- try(calculate_roc(deepsdm_all_season, xy_p_season_trainsplit, xy_pa_season_sample_trainsplit))
         deepsdm_all_season_val <- try(calculate_roc(deepsdm_all_season, xy_p_season_valsplit, xy_pa_season_sample_valsplit))

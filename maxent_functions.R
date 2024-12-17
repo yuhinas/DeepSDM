@@ -12,16 +12,17 @@ predict_maxent <- function(env, xm){
 }
 
 # function of plotting maxent results
-plot_result <- function(sp, xm, extent_binary, p, log_info, dir_timelog_png_sp, dir_timelog_h5_sp, timelog, time = NULL){
-  sptime <- if (is.null(time)) sp else sprintf('%s_%s', sp, time)
+plot_result <- function(sp, xm, extent_binary, p, log_info, dir_timelog_png_sp, dir_timelog_h5_sp, timelog, date = NULL){
+  spdate <- if (is.null(date)) sp else sprintf('%s_%s', sp, date)
+  date <- if (is.null(date)) 'all' else date
   png(file.path(dir_timelog_png_sp, 
-                sprintf('%s_%s_%s.png', sptime, log_info, timelog)
+                sprintf('%s_%s_%s.png', spdate, log_info, timelog)
                ),
       width = 500,
       height = 1000)
   
   plot(xm * extent_binary,
-       main = sprintf('%s_%s_%s', sptime, log_info, timelog),
+       main = sprintf('%s_%s_%s', spdate, log_info, timelog),
        axes = FALSE,
        box = FALSE,
        legend = FALSE,
@@ -33,7 +34,7 @@ plot_result <- function(sp, xm, extent_binary, p, log_info, dir_timelog_png_sp, 
   dev.off()
 #   writeRaster(xm * extent_binary, 
 #               file.path(dir_timelog_tif_sp, 
-#                         sprintf('%s_%s_%s.tif', sptime, log_info, timelog)), 
+#                         sprintf('%s_%s_%s.tif', spdate, log_info, timelog)), 
 #               overwrite = T)
   # HDF5 文件路徑
   h5_file_path <- file.path(dir_timelog_h5_sp, sprintf('%s.h5', sp))
@@ -42,26 +43,43 @@ plot_result <- function(sp, xm, extent_binary, p, log_info, dir_timelog_png_sp, 
   h5_file <- H5File$new(h5_file_path, mode = "a")  # 'a' 模式
 
   # 確保 dataset 名稱不重複
-  if (sptime %in% h5_file$ls()) {
-      h5_file[[sptime]]$delete()  # 刪除現有 dataset
+  if (date %in% h5_file$ls()$name) {
+      h5_file[[date]]$delete()  # 刪除現有 dataset
   }
+    
+  # 保存 CRS 和 transform 到 attribute
+  h5attr(h5_file, 'crs') <- as.character(raster::crs(extent_binary))
+    
+  extent_vals <- extent(extent_binary)  # 獲取 xmin, xmax, ymin, ymax
+  xres <- res(extent_binary)[1]         # x 分辨率
+  yres <- -res(extent_binary)[2]        # y 分辨率 (負值表示從上到下)
+  # 構建 transform 向量 (仿射變換參數)
+  transform_values <- c(
+    extent_vals@xmin,  # xmin
+    xres,              # xres
+    0,                 # xrot
+    extent_vals@ymax,  # ymax
+    0,                 # yrot
+    yres               # yres
+  )
+  h5attr(h5_file, 'transform') <- transform_values
 
   # 寫入數據
-  h5_file[[sptime]] <- t(as.matrix(xm * extent_binary))
+  h5_file[[date]] <- t(as.matrix(xm * extent_binary))
 
   # 關閉文件
   h5_file$close()
 }
 
 # function of plotting deepsdm result
-plot_result_deepsdm <- function(sptime, xm, extent_binary, p, log_info, dir_timelog_png_sp, timelog){
+plot_result_deepsdm <- function(spdate, xm, extent_binary, p, log_info, dir_timelog_png_sp, timelog){
   png(file.path(dir_timelog_png_sp, 
-                sprintf('%s_%s_%s.png', sptime, log_info, timelog)),
+                sprintf('%s_%s_%s.png', spdate, log_info, timelog)),
       width = 500,
       height = 1000)
   
   plot(xm * extent_binary,
-       main = sprintf('%s_%s_%s', sptime, log_info, timelog),
+       main = sprintf('%s_%s_%s', spdate, log_info, timelog),
        axes = FALSE,
        box = FALSE,
        legend = FALSE,
@@ -143,11 +161,11 @@ calculate_indicator <- function(rst){
 }
 
 # load env season layers
-load_env_season <- function(env_list, env_info, time, DeepSDM_conf){
+load_env_season <- function(env_list, env_info, date, DeepSDM_conf){
   files_env <- c()
   i <- 1
   for(env in env_list){
-    files_env[i] <- file.path(env_info$info[[env]][[time]]$tif_span_avg)
+    files_env[i] <- file.path(env_info$info[[env]][[date]]$tif_span_avg)
     i <- i + 1
   }
   env_season <- raster::stack(files_env)
@@ -166,10 +184,10 @@ load_env_allseason <- function(env_list, env_info, date_list_all_selectseason, D
   date_list_all_selectseason <- as.vector(date_list_all_selectseason)
   
   env_allseason_list <- list()
-  for(time in date_list_all_selectseason){
-    print(time)
+  for(date in date_list_all_selectseason){
+    print(date)
     files_env <- lapply(env_list, function(env) {
-      file.path(env_info$info[[env]][[time]]$tif_span_avg)
+      file.path(env_info$info[[env]][[date]]$tif_span_avg)
     }) %>% unlist()
     
     env_allseason <- raster::stack(files_env)
@@ -179,7 +197,7 @@ load_env_allseason <- function(env_list, env_info, date_list_all_selectseason, D
         values(env_allseason[[env]]) <<- (values(env_allseason[[env]]) - env_info$info[[env]]$mean) / env_info$info[[env]]$sd
       }
     })
-    env_allseason_list[[time]] <- env_allseason
+    env_allseason_list[[date]] <- env_allseason
   }
   layer_means <- lapply(1:length(env_list), function(layer_index) {
     print(paste0('env_', layer_index))
@@ -267,7 +285,7 @@ set_default_variable_all <- function(default_value = -9999){
 
 # generate presence and pseudo-absence / absence point data of one season
 generate_points <- function(num_pa = 10000){
-  occ_rst_path <- file.path('.', sp_info$dir_base, sp_info$file_name[[species]][[time]])
+  occ_rst_path <- file.path('.', sp_info$dir_base, sp_info$file_name[[species]][[date]])
   occ_rst <- raster::raster(occ_rst_path)
   i_p_occ_rst <- which(values(occ_rst) == 1)
   i_pa_occ_rst <- which(values(occ_rst) == 0)
@@ -290,8 +308,8 @@ generate_points <- function(num_pa = 10000){
 # generate presence and pseudo-absence / absence point data of allseason
 generate_points_allseason <- function(){
   
-  occ_rst_path <- lapply(date_list_all_selectseason, function(time){
-    file.path('.', sp_info$dir_base, sp_info$file_name[[species]][[time]])
+  occ_rst_path <- lapply(date_list_all_selectseason, function(date){
+    file.path('.', sp_info$dir_base, sp_info$file_name[[species]][[date]])
   })
   occ_rst_path <- unlist(occ_rst_path)
   occ_rst <- raster::stack(occ_rst_path)
@@ -316,8 +334,8 @@ generate_points_allseason <- function(){
 # generate presence and pseudo-absence / absence point data of all
 generate_points_all <- function(date_list_all){
   
-  occ_rst_path <- lapply(date_list_all, function(time){
-    file.path('.', sp_info$dir_base, sp_info$file_name[[species]][[time]])
+  occ_rst_path <- lapply(date_list_all, function(date){
+    file.path('.', sp_info$dir_base, sp_info$file_name[[species]][[date]])
   })
   occ_rst_path <- unlist(occ_rst_path)
   occ_rst <- raster::stack(occ_rst_path)
@@ -337,4 +355,39 @@ generate_points_all <- function(date_list_all){
   xy_pa_all_sample <<- xyFromCell(occ_rst, i_pa_all_sample)
   xy_pa_all_sample_trainsplit <<- xyFromCell(occ_rst, intersect(i_pa_all_sample, i_trainsplit))
   xy_pa_all_sample_valsplit <<- xyFromCell(occ_rst, intersect(i_pa_all_sample, i_valsplit))
+}
+                         
+# check if the dataset in h5 file
+check_dataset_in_h5 <- function(h5_path, dataset_name){
+    if(file.exists(h5_path)){
+        h5_file <- H5File$new(h5_path, mode = "r")
+        dataset_in_h5 <- dataset_name %in% h5_file$ls()$name
+        h5_file$close()
+        return(dataset_in_h5)
+    }else{
+        return(FALSE)
+    }
+}
+                         
+# convert dataset in h5 to raster format in r
+h5dataset_to_raster <- function(h5_path, dataset_name){
+    h5_file <- H5File$new(h5_path, mode = "r")
+    crs <- h5attributes(h5_file)$crs
+    transform <- h5attributes(h5_file)$transform
+    h5_array <- h5_file[[dataset_name]]
+    extent_data <- extent(transform[1],
+                          transform[1] + transform[2] * h5_array$dims[1],  # xmax
+                          transform[4] + transform[6] * h5_array$dims[2],  # ymin
+                          transform[4])  # ymax
+    crs_data <- CRS(crs)
+    raster_output <- raster::raster(
+        t(
+            h5_array[1:h5_array$dims[1], 
+                     1:h5_array$dims[2]]
+        )
+    )
+    extent(raster_output) <- extent_data
+    crs(raster_output) <- crs_data
+    h5_file$close()
+    return(raster_output)
 }
