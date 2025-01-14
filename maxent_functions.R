@@ -109,7 +109,7 @@ calculate_roc <- function(px, p, bg){
 calculate_indicator <- function(rst){
   # 如果沒有presence points就直接return 0
   if(nrow(xy_p_season_trainsplit) == 0 | nrow(xy_p_season_valsplit) == 0 | nrow(xy_pa_season_sample_trainsplit) == 0 | nrow(xy_pa_season_sample_valsplit) == 0){
-    return(c(-9999, -9999, -9999))
+    return(c(-9999, -9999, -9999, -9999))
   }
   
   train_pred_1 <- raster::extract(rst, xy_p_season_trainsplit) %>% as.numeric()
@@ -119,7 +119,7 @@ calculate_indicator <- function(rst){
   roc_obj_train <- roc(c(train_actual_1, train_actual_0), c(train_pred_1, train_pred_0))
   
   # 提取最佳靈敏度和特異性，計算 TSS
-  best_threshold_train <- coords(roc_obj_train, 'best', ret=c('threshold')) %>% pull() %>% median()
+  best_threshold_train <- coords(roc_obj_train, 'best', ret=c('threshold')) %>% pull() %>% min()
 
   # 根據最佳閾值進行分類
   val_pred_1 <- raster::extract(rst, xy_p_season_valsplit)
@@ -157,7 +157,7 @@ calculate_indicator <- function(rst){
   # 計算 kappa
   kappa <- (p_0 - p_e) / (1 - p_e)
   
-  return(c(TSS, kappa, f1))
+  return(c(TSS, kappa, f1, best_threshold_train))
 }
 
 # load env season layers
@@ -233,7 +233,9 @@ set_default_variable <- function(default_value = -9999){
   deepsdm_kappa <<- default_value
   maxent_f1 <<- default_value
   deepsdm_f1 <<- default_value
-  
+  maxent_threshold <<- default_value
+  deepsdm_threshold <<- default_value
+    
   p_season <<- default_value
   p_valpart_season <<- default_value
   p_trainpart_season <<- default_value
@@ -275,7 +277,7 @@ set_default_variable_all <- function(default_value = -9999){
   p_trainpart_all <<- default_value
   pa_valpart_all <<- default_value
   pa_trainpart_all <<- default_value
-  
+    
   p_all <<- ifelse(exists('xy_p_all'), nrow(xy_p_all), default_value) 
   p_valpart_all <<- ifelse(exists('xy_p_all_valsplit'), nrow(xy_p_all_valsplit), default_value)
   p_trainpart_all <<- ifelse(exists('xy_p_all_trainsplit'), nrow(xy_p_all_trainsplit), default_value)
@@ -390,4 +392,73 @@ h5dataset_to_raster <- function(h5_path, dataset_name){
     crs(raster_output) <- crs_data
     h5_file$close()
     return(raster_output)
+}
+
+                         
+# create binary h5 file
+log_binary <- function(dir_run_id_h5_binary, dir_run_id_png_binary, species, date, rst, threshold, extent_binary, log_info, timelog, p, file_name, h5 = TRUE, png = TRUE){
+    
+    rst[rst >= threshold] <- 1
+    rst[rst < threshold] <- 0
+    
+    if(h5){
+        dir_run_id_h5_binary_sp <- file.path(dir_run_id_h5_binary, species)
+        create_folder(dir_run_id_h5_binary_sp)
+        
+        # HDF5 文件路徑
+        h5_file_path <- file.path(dir_run_id_h5_binary_sp, file_name)
+    
+        # 打開或創建 HDF5 文件
+        h5_file <- H5File$new(h5_file_path, mode = "a")  # 'a' 模式
+
+        # 確保 dataset 名稱不重複
+        if (date %in% h5_file$ls()$name) {
+            h5_file[[date]]$delete()  # 刪除現有 dataset
+        }
+        
+        # 保存 CRS 和 transform 到 attribute
+        h5attr(h5_file, 'crs') <- as.character(raster::crs(extent_binary))
+        extent_vals <- extent(extent_binary)  # 獲取 xmin, xmax, ymin, ymax
+        xres <- res(extent_binary)[1]         # x 分辨率
+        yres <- -res(extent_binary)[2]        # y 分辨率 (負值表示從上到下)
+        
+        # 構建 transform 向量 (仿射變換參數)
+        transform_values <- c(
+            extent_vals@xmin,  # xmin
+            xres,              # xres
+            0,                 # xrot
+            extent_vals@ymax,  # ymax
+            0,                 # yrot
+            yres               # yres
+        )
+        h5attr(h5_file, 'transform') <- transform_values
+
+        # 寫入數據
+        h5_file[[date]] <- t(as.matrix(rst * extent_binary))
+
+        # 關閉文件
+        h5_file$close()
+    }
+    
+    if(png){
+        dir_run_id_png_binary_sp <- file.path(dir_run_id_png_binary, species)
+        create_folder(dir_run_id_png_binary_sp)
+        
+        png(
+            file.path(dir_run_id_png_binary_sp, 
+                      sprintf('%s_%s_%s_%s.png', species, date, log_info, timelog)),
+            width = 500,
+            height = 1000)
+        
+        plot(rst * extent_binary,
+             main = sprintf('%s_%s_%s_%s', species, date, log_info, timelog),
+             axes = FALSE,
+             box = FALSE,
+             legend = FALSE,
+             cex.main = 0.7,
+             col = color,
+             breaks = seq(0, 1, 0.125))
+        points(p, pch = 16, col = 'black', cex = 1)
+        dev.off()   
+    }
 }

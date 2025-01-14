@@ -25,6 +25,10 @@ dir_run_id_png <- file.path(dir_base_run_id, 'png', 'all')
 create_folder(dir_run_id_png)
 dir_run_id_h5 <- file.path(dir_base_run_id, 'h5', 'all')
 create_folder(dir_run_id_h5)
+dir_run_id_png_binary <- file.path(dir_base_run_id, 'png', 'binary')
+create_folder(dir_run_id_png_binary)
+dir_run_id_h5_binary <- file.path(dir_base_run_id, 'h5', 'binary')
+create_folder(dir_run_id_h5_binary)
 dir_run_id_env_contribution <- file.path(dir_base_run_id, 'env_contribution', 'all')
 create_folder(dir_run_id_env_contribution)
 dir_maxent_model <- file.path(dir_base_run_id, 'maxent_model')
@@ -72,7 +76,8 @@ df_all_season <- data.frame(spdate = character(),
                             maxent_all_season_val = numeric(), maxent_all_season_train = numeric(), maxent_all_season_all = numeric(), 
                             deepsdm_all_season_val = numeric(), deepsdm_all_season_train = numeric(), deepsdm_all_season_all = numeric(), 
                             maxent_TSS = numeric(), deepsdm_TSS = numeric(), maxent_kappa = numeric(), deepsdm_kappa = numeric(), maxent_f1 = numeric(), deepsdm_f1 = numeric(), 
-                            p_season = numeric(), p_valpart_season = numeric(), p_trainpart_season = numeric(), pa_valpart_season = numeric(), pa_trainpart_season = numeric())
+                            p_season = numeric(), p_valpart_season = numeric(), p_trainpart_season = numeric(), pa_valpart_season = numeric(), pa_trainpart_season = numeric(), 
+                            maxent_threshold = numeric(), deepsdm_threshold = numeric())
 df_all_all <- data.frame(species = character(),
                          maxent_all_all_val = numeric(), maxent_all_all_train = numeric(), maxent_all_all_all = numeric(), 
                          p_all = numeric(), p_valpart_all = numeric(), p_trainpart_all = numeric(), pa_valpart_all = numeric(), pa_trainpart_all = numeric())
@@ -128,7 +133,7 @@ for(species in species_list[r_start:min(r_end, length(species_list))]){
         maxent_all_all_val <- calculate_roc(maxent_all_all, xy_p_all_valsplit, xy_pa_all_sample_valsplit)
         maxent_all_all_all <- calculate_roc(maxent_all_all, xy_p_all, xy_pa_all_sample)
       }
-  }else{      
+  }else{
     maxent_all_all <- h5dataset_to_raster(maxent_h5_path, 'all')
     maxent_all_all_exists <- TRUE
     load(file.path(dir_maxent_model, sprintf('%s_all.RData', species)))
@@ -176,6 +181,9 @@ for(species in species_list[r_start:min(r_end, length(species_list))]){
       maxent_TSS <- maxent_other_indicator[1]
       maxent_kappa <- maxent_other_indicator[2]
       maxent_f1 <- maxent_other_indicator[3]
+      maxent_threshold <- maxent_other_indicator[4]
+      log_binary(dir_run_id_h5_binary, dir_run_id_png_binary, species, date, maxent_all_season, maxent_threshold, 
+                 extent_binary, 'maxent_all_season', run_id, xy_p_season, sprintf('%s_maxent.h5', species), h5 = TRUE, png = TRUE)
         
       # deepsdm
       deepsdm_h5_path <- file.path('predicts', run_id, 'h5', species, sprintf('%s.h5', species))
@@ -191,13 +199,17 @@ for(species in species_list[r_start:min(r_end, length(species_list))]){
         deepsdm_TSS <- deepsdm_other_indicator[1]
         deepsdm_kappa <- deepsdm_other_indicator[2]
         deepsdm_f1 <- deepsdm_other_indicator[3]
+        deepsdm_threshold <- deepsdm_other_indicator[4]  
+        log_binary(dir_run_id_h5_binary, dir_run_id_png_binary, species, date, deepsdm_all_season, deepsdm_threshold, 
+                   extent_binary, 'deepsdm_all_season', run_id, xy_p_season, sprintf('%s_deepsdm.h5', species), h5 = TRUE, png = TRUE)
       }
     }
     df_all_season[nrow(df_all_season)+1, ] <- c(sp_season,
                                                 maxent_all_season_val, maxent_all_season_train, maxent_all_season_all, 
                                                 deepsdm_all_season_val, deepsdm_all_season_train, deepsdm_all_season_all, 
                                                 maxent_TSS, deepsdm_TSS, maxent_kappa, deepsdm_kappa, maxent_f1, deepsdm_f1, 
-                                                p_season, p_valpart_season, p_trainpart_season, pa_valpart_season, pa_trainpart_season)
+                                                p_season, p_valpart_season, p_trainpart_season, pa_valpart_season, pa_trainpart_season, 
+                                                maxent_threshold, deepsdm_threshold)
   }
 }
 
