@@ -218,10 +218,6 @@ set_default_variable <- function(default_value = -9999){
   maxent_season_season_all <<- default_value
   maxent_season_season_train <<- default_value
   maxent_season_season_val <<- default_value
-  
-  maxent_allseason_season_val <<- default_value
-  maxent_allseason_season_train <<- default_value
-  maxent_allseason_season_all <<- default_value
 
   maxent_all_season_val <<- default_value
   maxent_all_season_train <<- default_value
@@ -247,23 +243,7 @@ set_default_variable <- function(default_value = -9999){
   pa_valpart_season <<- ifelse(exists('xy_pa_season_sample_valsplit'), nrow(xy_p_season_trainsplit), default_value)
   pa_trainpart_season <<- ifelse(exists('xy_pa_season_sample_trainsplit'), nrow(xy_p_season_trainsplit), default_value)
 }
-set_default_variable_allseason <- function(default_value = -9999){
-  maxent_allseason_allseason_val <<- default_value
-  maxent_allseason_allseason_train <<- default_value
-  maxent_allseason_allseason_all <<- default_value
-  
-  p_allseason <<- default_value
-  p_valpart_allseason <<- default_value
-  p_trainpart_allseason <<- default_value
-  pa_valpart_allseason <<- default_value
-  pa_trainpart_allseason <<- default_value
-  
-  p_allseason <<- ifelse(exists('xy_p_allseason'), nrow(xy_p_allseason), default_value)
-  p_valpart_allseason <<- ifelse(exists('xy_p_allseason_valsplit'), nrow(xy_p_allseason_valsplit), default_value)
-  p_trainpart_allseason <<- ifelse(exists('xy_p_allseason_trainsplit'), nrow(xy_p_allseason_trainsplit), default_value)
-  pa_valpart_allseason <<- ifelse(exists('xy_pa_allseason_sample_valsplit'), nrow(xy_pa_allseason_sample_valsplit), default_value)
-  pa_trainpart_allseason <<- ifelse(exists('xy_pa_allseason_sample_trainsplit'), nrow(xy_pa_allseason_sample_trainsplit), default_value) 
-}
+
 set_default_variable_all <- function(default_value = -9999){
   maxent_all_all_val <<- default_value
   maxent_all_all_train <<- default_value
@@ -307,31 +287,6 @@ generate_points <- function(num_pa = 10000){
   xy_pa_season_sample_valsplit <<- xyFromCell(occ_rst, intersect(i_pa_season_sample, i_valsplit))
 }
 
-# generate presence and pseudo-absence / absence point data of allseason
-generate_points_allseason <- function(){
-  
-  occ_rst_path <- lapply(date_list_all_selectseason, function(date){
-    file.path('.', sp_info$dir_base, sp_info$file_name[[species]][[date]])
-  })
-  occ_rst_path <- unlist(occ_rst_path)
-  occ_rst <- raster::stack(occ_rst_path)
-  occ_rst <- calc(occ_rst, function(x) {
-    sign(sum(x, na.rm = TRUE))
-  })
-  
-  i_p_occ_rst <- which(values(occ_rst) == 1)
-  i_pa_occ_rst <- which(values(occ_rst) == 0)
-  xy_p_allseason <<- xyFromCell(occ_rst, i_p_occ_rst) # x,y value from cells with presence records
-  xy_p_allseason_trainsplit <<- xyFromCell(occ_rst, intersect(i_p_occ_rst, i_trainsplit))
-  xy_p_allseason_valsplit <<- xyFromCell(occ_rst, intersect(i_p_occ_rst, i_valsplit))
-  
-  i_pa_allseason <- intersect(i_pa_occ_rst, i_extent)
-  xy_pa_allseason <- xyFromCell(occ_rst, i_pa_allseason)
-  i_pa_allseason_sample <- sample(i_pa_allseason, 10000)
-  xy_pa_allseason_sample <<- xyFromCell(occ_rst, i_pa_allseason_sample)
-  xy_pa_allseason_sample_trainsplit <<- xyFromCell(occ_rst, intersect(i_pa_allseason_sample, i_trainsplit))
-  xy_pa_allseason_sample_valsplit <<- xyFromCell(occ_rst, intersect(i_pa_allseason_sample, i_valsplit))
-}
 
 # generate presence and pseudo-absence / absence point data of all
 generate_points_all <- function(date_list_all){
