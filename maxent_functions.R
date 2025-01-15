@@ -44,7 +44,7 @@ plot_result <- function(sp, xm, extent_binary, p, log_info, dir_timelog_png_sp, 
 
   # 確保 dataset 名稱不重複
   if (date %in% h5_file$ls()$name) {
-      h5_file[[date]]$delete()  # 刪除現有 dataset
+      h5_file$link_delete(date)  # 刪除現有 dataset
   }
     
   # 保存 CRS 和 transform 到 attribute
