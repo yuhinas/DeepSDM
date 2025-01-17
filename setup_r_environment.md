@@ -121,3 +121,19 @@ sudo Rscript -e 'install.packages("yaml")'
 ```bash
 sudo Rscript -e 'install.packages("hdf5r")'
 ```
+
+## 10. Install `arrow`
+```bash
+sudo Rscript -e 'install.packages("arrow")'
+```
+
+## 11. Install `hypervolume`
+1. Install GMP:
+    ```bash
+    sudo apt-get install -y libgmp-dev
+    ```
+    
+2. Install `hypervolume`
+    ```bash
+    sudo Rscript -e 'install.packages("hypervolume")'
+    ```
