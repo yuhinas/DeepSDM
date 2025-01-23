@@ -137,3 +137,9 @@ sudo Rscript -e 'install.packages("arrow")'
     ```bash
     sudo Rscript -e 'install.packages("hypervolume")'
     ```
+    
+## 12. Install `data.table`
+```bash
+sudo Rscript -e 'install.packages("data.table")'
+```    
+ 
