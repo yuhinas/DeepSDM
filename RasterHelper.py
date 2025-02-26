@@ -884,7 +884,7 @@ class RasterHelper:
         self.CCI_PCA_components = pca.components_
         self.CCI_PCA_variance_ratio = pca.explained_variance_ratio_
         
-        # decide how many components should be logged 
+        # decide how many components should be logged
         num_components = 0
         while True:
             if self.CCI_PCA_variance_ratio[:num_components].sum() >= conf['PCA']:
