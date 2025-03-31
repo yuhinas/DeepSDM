@@ -9,7 +9,8 @@ import numpy as np
 from matplotlib.patches import Ellipse
 import cv2
 import matplotlib as mpl
-
+from joblib import Parallel, delayed
+import h5py
 
 class PlotUtlis():
     def __init__(self, run_id, exp_id):
@@ -18,8 +19,10 @@ class PlotUtlis():
         self.conf_path = os.path.join('mlruns', exp_id, run_id, 'artifacts', 'conf')
         self.predicts_path = os.path.join('predicts', run_id)
         
+        self.deepsdm_h5_path = os.path.join('predicts', run_id, 'h5', '[SPECIES]', '[SPECIES].h5')
+        self.maxent_h5_path = os.path.join('predict_maxent', run_id, 'h5', 'all', '[SPECIES]', '[SPECIES].h5')  
         
-        
+        self.attention_h5_path = os.path.join('predicts', run_id, 'attention', '[SPECIES]', '[SPECIES]_[DATE]_attention.h5')
         
         # 變數
         # DeepSDM configurations
@@ -45,13 +48,11 @@ class PlotUtlis():
             self.env_info = json.load(f)        
         
         self.species_list_train = sorted(self.DeepSDM_conf.training_conf['species_list_train'])
+        self.species_list_predict = sorted(self.DeepSDM_conf.training_conf['species_list_predict'])
         self.species_list_all = sorted(list(self.coocc_vector.keys()))
 
         self.date_list_predict = self.DeepSDM_conf.training_conf['date_list_predict']
-        self.date_list_train = self.DeepSDM_conf.training_conf['date_list_train']
-
-        self.deepsdm_h5_path = os.path.join('predicts', run_id, 'h5', '[SPECIES]', '[SPECIES].h5')
-        self.maxent_h5_path = os.path.join('predict_maxent', run_id, 'h5', 'all', '[SPECIES]', '[SPECIES].h5')        
+        self.date_list_train = self.DeepSDM_conf.training_conf['date_list_train']      
         
         self.species_occ = pd.read_csv(self.DeepSDM_conf.cooccurrence_conf['sp_filter_from'])
         
@@ -61,18 +62,37 @@ class PlotUtlis():
         
         self.coocc_counts = pd.read_csv('./workspace/species_data/cooccurrence_data/cooccurrence.csv', sep = '\t')
             
-            
+        self.env_list = self.DeepSDM_conf.training_conf['env_list']
+        env_list_change = {
+            'clt': 'Cloud area fraction',
+            'hurs': 'Relative humidity',
+            'pr': 'Precipitation',
+            'rsds': 'Shortwave radiation',
+            'sfcWind': 'Wind speed',
+            'tas': 'Temperature',
+            'EVI': 'EVI',
+            'landcover_PC00': 'Landcover (LPC1)',
+            'landcover_PC01': 'Landcover (LPC2)',
+            'landcover_PC02': 'Landcover (LPC3)',
+            'landcover_PC03': 'Landcover (LPC4)',
+            'landcover_PC04': 'Landcover (LPC5)', 
+        }
+        self.env_list_detail = [env_list_change[i] for i in self.env_list]
+        
+        
+        
         # 子資料夾路徑
         self.plot_path_embedding_dimension_reduction = os.path.join('plots', run_id, 'Fig2_embedding_dimension_reduction')
         self.plot_path_embedding_correlation = os.path.join('plots', run_id, 'Fig2_embedding_correlation')        
-        
+        self.plot_path_attention = os.path.join('plots', run_id, 'Fig3_attention')
+        self.plot_path_attentionstats = os.path.join('plots', run_id, 'FigS2_attentionstats')
         
         
         
         # 輸出路徑
         # output path
         self.avg_elev_path = os.path.join(self.plot_path_embedding_dimension_reduction, 'avg_elevation.csv')
-        
+        self.df_attention_path = os.path.join(self.plot_path_attention, 'df_attention.csv')
         
         
         
@@ -133,8 +153,35 @@ class PlotUtlis():
         coocc_counts = coocc_counts[(coocc_counts.sp1.isin(species_list)) & (coocc_counts.sp2.isin(species_list))].reset_index(drop = True)
         
         return coocc_counts
+    
+    # For Fig3
+    def create_attention_df(self):
         
+        def process_species(species, env_list, date_list_predict):
+            sp_attention = np.zeros([len(env_list), 560, 336], dtype=np.float32)
+            for date in date_list_predict:
+                with h5py.File(self.attention_h5_path.replace('[SPECIES]', species).replace('[DATE]', date), 'r') as hf:
+                    for i_env, env in enumerate(env_list):
+                        sp_attention[i_env] += hf[env][:]  # 直接累加
+
+            # 處理數據，將小於0的值設為 NaN 並計算平均值
+            sp_attention[sp_attention < 0] = np.nan
+            species_attention = np.nanmean(sp_attention, axis=(1, 2)) / len(date_list_predict)
+            return [species] + species_attention.tolist()
+
+        # 並行處理所有物種
+        results = Parallel(n_jobs=-1)(
+            delayed(process_species)(species, self.env_list, self.date_list_predict) 
+            for species in self.species_list_predict
+        )
+
+        # 將結果轉換為 DataFrame
+        df_attention = pd.DataFrame(results, columns=['Species'] + self.env_list).set_index('Species')
         
+        return df_attention
+        
+    # For Fig3
+    
         
         
         
@@ -289,3 +336,20 @@ def get_significance_stars(p_value):
         return '*'
     else:
         return 'n.s.'
+    
+def convert_to_env_list_detail(env_list_original):
+    env_list_change = {
+        'clt': 'Cloud area fraction',
+        'hurs': 'Relative humidity',
+        'pr': 'Precipitation',
+        'rsds': 'Shortwave radiation',
+        'sfcWind': 'Wind speed',
+        'tas': 'Temperature',
+        'EVI': 'EVI',
+        'landcover_PC00': 'LandcoverPC1',
+        'landcover_PC01': 'LandcoverPC2',
+        'landcover_PC02': 'LandcoverPC3',
+        'landcover_PC03': 'LandcoverPC4',
+        'landcover_PC04': 'LandcoverPC5', 
+    }
+    return [env_list_change[i] for i in env_list_original]
