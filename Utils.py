@@ -13,9 +13,15 @@ import matplotlib as mpl
 
 class PlotUtlis():
     def __init__(self, run_id, exp_id):
+        
+        # 路徑
         self.conf_path = os.path.join('mlruns', exp_id, run_id, 'artifacts', 'conf')
         self.predicts_path = os.path.join('predicts', run_id)
         
+        
+        
+        
+        # 變數
         # DeepSDM configurations
         self.DeepSDM_conf_path = os.path.join(self.conf_path, 'DeepSDM_conf.yaml')
         with open(self.DeepSDM_conf_path, 'r') as f:
@@ -38,11 +44,6 @@ class PlotUtlis():
         with open(os.path.join(self.conf_path, 'env_information.json')) as f:
             self.env_info = json.load(f)        
         
-        # create a plot folder of the specific exp_id
-        self.plot_path_embedding_dimension_reduction = os.path.join('plots', run_id, 'Fig2_embedding_dimension_reduction')
-                
-        
-        
         self.species_list_train = sorted(self.DeepSDM_conf.training_conf['species_list_train'])
         self.species_list_all = sorted(list(self.coocc_vector.keys()))
 
@@ -54,14 +55,21 @@ class PlotUtlis():
         
         self.species_occ = pd.read_csv(self.DeepSDM_conf.cooccurrence_conf['sp_filter_from'])
         
-        
         elev_path = os.path.join(self.env_info['dir_base'], self.env_info['info']['elev'][self.date_list_train[0]]['tif_span_avg'])
         with rasterio.open(elev_path, 'r') as f:
-            self.elev_rst = f.read(1)  # 海拔數據
+            self.elev_rst = f.read(1)
+        
+        self.coocc_counts = pd.read_csv('./workspace/species_data/cooccurrence_data/cooccurrence.csv', sep = '\t')
+            
+            
+        # 子資料夾路徑
+        self.plot_path_embedding_dimension_reduction = os.path.join('plots', run_id, 'Fig2_embedding_dimension_reduction')
+        self.plot_path_embedding_correlation = os.path.join('plots', run_id, 'Fig2_embedding_correlation')        
         
         
         
         
+        # 輸出路徑
         # output path
         self.avg_elev_path = os.path.join(self.plot_path_embedding_dimension_reduction, 'avg_elevation.csv')
         
@@ -110,6 +118,21 @@ class PlotUtlis():
         avg_elevation_df.rename(columns={'index': 'Species'}, inplace=True)
 
         return avg_elevation_df
+    
+    # For Fig2
+    def set_cooccurrence_counts(self, species_list):
+        coocc_counts = self.coocc_counts.copy()
+        
+        # remove sp1 == sp2
+        coocc_counts = coocc_counts[(coocc_counts.sp1 != coocc_counts.sp2)].reset_index(drop = True)
+
+        # delete records with "counts" equals 0
+        coocc_counts = coocc_counts[coocc_counts.counts != 0].reset_index(drop = True)
+
+        # delete records not in species_list
+        coocc_counts = coocc_counts[(coocc_counts.sp1.isin(species_list)) & (coocc_counts.sp2.isin(species_list))].reset_index(drop = True)
+        
+        return coocc_counts
         
         
         
@@ -255,3 +278,14 @@ def set_mpl_defaults():
     mpl.rcParams['lines.linewidth'] = 0.5
     mpl.rcParams['lines.markersize'] = 3
     mpl.rcParams['boxplot.medianprops.color'] = 'black'
+    
+# 顯著性標示函式
+def get_significance_stars(p_value):
+    if p_value <= 0.001:
+        return '***'
+    elif p_value <= 0.01:
+        return '**'
+    elif p_value <= 0.05:
+        return '*'
+    else:
+        return 'n.s.'
