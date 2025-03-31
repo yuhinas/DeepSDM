@@ -6,9 +6,7 @@ import json
 import rasterio
 from TaxaDataset_smoothviz_prediction import TaxaDataset_smoothviz
 from TaxaDataset import TaxaDataset
-# import matplotlib.pyplot as plt
 import pytorch_lightning as pl
-# import mlflow
 import yaml
 from types import SimpleNamespace
 import socket

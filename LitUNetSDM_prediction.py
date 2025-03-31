@@ -1,19 +1,13 @@
 import torch
-# import torch.nn.functional as F
 import numpy as np
 import matplotlib.pyplot as plt
-# import random
 import pytorch_lightning as pl
 from Unet import Unet
 from types import SimpleNamespace
-# from torchmetrics.functional.classification import binary_f1_score, binary_auroc
-# import mlflow
 import os
 import rasterio
 import yaml
-# from pytorch_lightning.callbacks import ModelCheckpoint
 import shutil
-# from torchvision.transforms import ToTensor
 import time
 import logging
 import h5py
