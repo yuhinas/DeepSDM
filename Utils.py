@@ -24,6 +24,10 @@ class PlotUtlis():
         
         self.attention_h5_path = os.path.join('predicts', run_id, 'attention', '[SPECIES]', '[SPECIES]_[DATE]_attention.h5')
         
+        self.traitdataset_taxon_path = os.path.join('dwca-trait_454-v1.68', 'taxon.txt')
+        self.traitdataset_mesurement_path = os.path.join('dwca-trait_454-v1.68', 'measurementorfacts.txt')
+        
+        
         # 變數
         # DeepSDM configurations
         self.DeepSDM_conf_path = os.path.join(self.conf_path, 'DeepSDM_conf.yaml')
@@ -181,7 +185,41 @@ class PlotUtlis():
         return df_attention
         
     # For Fig3
-    
+    def get_species_habitat(self, df_attention_order):
+        
+        taxon_df = pd.read_csv(self.traitdataset_taxon_path, delimiter = '\t')
+        measurement_df = pd.read_csv(self.traitdataset_mesurement_path, delimiter = '\t')
+
+        habitat_related_df = measurement_df[
+            measurement_df['measurementType'].str.contains('Habitat', na=False, case=False)
+        ]
+
+        merged_habitat_df = habitat_related_df.merge(taxon_df, left_on = 'id', right_on = 'taxonID', how = 'left')
+        merged_habitat_df['measurementValue'] = merged_habitat_df['measurementValue'].astype(float)
+        best_habitat = merged_habitat_df.loc[merged_habitat_df.groupby('taxonID')['measurementValue'].idxmax()]
+        species_habitat_df = best_habitat[['scientificName', 'measurementType']].copy()
+        name_to_change = {'Porzana fusca': 'Zapornia fusca', 
+                          'Gallirallus striatus': 'Lewinia striata', 
+                          'Stachyridopsis ruficeps': 'Cyanoderma ruficeps', 
+                          'Pomatorhinus erythrocnemis': 'Erythrogenys erythrocnemis', 
+                          'Alcippe brunnea': 'Schoeniparus brunneus', 
+                          'Ictinaetus malayensis': 'Ictinaetus malaiensis', 
+                          'Poecile varius': 'Sittiparus castaneoventris', 
+                          'Parus holsti': 'Machlolophus holsti', 
+                          'Turdus poliocephalus': 'Turdus niveiceps', 
+                          'Garrulax poecilorhynchus': 'Pterorhinus poecilorhynchus', 
+                          'Garrulax ruficeps': 'Pterorhinus ruficeps', 
+                          'Glaucidium brodiei': 'Taenioptynx brodiei', 
+                          'Tarsiger indicus': 'Tarsiger formosanus'}
+
+        df_attention_sp_name = list(df_attention_order.index)
+        for i, name in enumerate(df_attention_sp_name):
+            if name in name_to_change:
+                df_attention_sp_name[i] = name_to_change[name]
+
+        habitat = [species_habitat_df.measurementType[species_habitat_df.scientificName == sp].values.tolist()[0] for sp in df_attention_sp_name]
+        
+        return habitat
         
         
         
@@ -325,7 +363,8 @@ def set_mpl_defaults():
     mpl.rcParams['lines.linewidth'] = 0.5
     mpl.rcParams['lines.markersize'] = 3
     mpl.rcParams['boxplot.medianprops.color'] = 'black'
-    
+    mpl.rcParams['hatch.linewidth'] = 0.5 
+
 # 顯著性標示函式
 def get_significance_stars(p_value):
     if p_value <= 0.001:
@@ -353,3 +392,17 @@ def convert_to_env_list_detail(env_list_original):
         'landcover_PC04': 'LandcoverPC5', 
     }
     return [env_list_change[i] for i in env_list_original]
+
+# Fig3
+def reorder_df_attention(df_attention, env_order = 'LandcoverPC1'):
+    df_attention_order = df_attention.copy()
+    df_attention_order.columns = convert_to_env_list_detail(df_attention_order.columns)
+    
+    df_attention_order = df_attention_order.sort_values(by = env_order, ascending=True)
+
+    factor_order = df_attention_order.mean().sort_values(ascending=True).index
+    df_attention_order = df_attention_order[factor_order]
+
+    df_attention_order.index = [f"{sp.split('_')[0]} {sp.split('_')[1]}" for sp in list(df_attention_order.index)]
+    
+    return df_attention_order
