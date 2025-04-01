@@ -11,21 +11,36 @@ import cv2
 import matplotlib as mpl
 from joblib import Parallel, delayed
 import h5py
+import feather
+from concurrent.futures import ThreadPoolExecutor
+from scipy.spatial.distance import mahalanobis
+from scipy.stats import spearmanr, ttest_rel
+import glob
 
 class PlotUtlis():
-    def __init__(self, run_id, exp_id):
+    def __init__(self, run_id, exp_id, niche_rst_size):
+        self.niche_rst_size = niche_rst_size
+        
+        
         
         # 路徑
         self.conf_path = os.path.join('mlruns', exp_id, run_id, 'artifacts', 'conf')
         self.predicts_path = os.path.join('predicts', run_id)
+        self.predict_maxent_path = os.path.join('predict_maxent', run_id)
         
         self.deepsdm_h5_path = os.path.join('predicts', run_id, 'h5', '[SPECIES]', '[SPECIES].h5')
         self.maxent_h5_path = os.path.join('predict_maxent', run_id, 'h5', 'all', '[SPECIES]', '[SPECIES].h5')  
         
         self.attention_h5_path = os.path.join('predicts', run_id, 'attention', '[SPECIES]', '[SPECIES]_[DATE]_attention.h5')
         
+        
         self.traitdataset_taxon_path = os.path.join('dwca-trait_454-v1.68', 'taxon.txt')
         self.traitdataset_mesurement_path = os.path.join('dwca-trait_454-v1.68', 'measurementorfacts.txt')
+        
+        self.performance_indicator_multithreshold = os.path.join('predict_maxent', run_id, 'all_indicator_result_all_season_num_pa*.csv')
+        self.performance_indicator_singlethreshold = os.path.join('predict_maxent', run_id, 'only_threshold_depend_indi_*.csv')
+        
+        
         
         
         # 變數
@@ -45,7 +60,7 @@ class PlotUtlis():
         
         # species occurrence points
         with open(os.path.join(self.predicts_path, 'sp_inf.json'), 'r') as f:
-            self.sp_inf = json.load(f)
+            self.sp_info = json.load(f)
         with open(os.path.join(self.conf_path, 'cooccurrence_vector.json')) as f:
             self.coocc_vector = json.load(f)
         with open(os.path.join(self.conf_path, 'env_information.json')) as f:
@@ -90,13 +105,54 @@ class PlotUtlis():
         self.plot_path_embedding_correlation = os.path.join('plots', run_id, 'Fig2_embedding_correlation')        
         self.plot_path_attention = os.path.join('plots', run_id, 'Fig3_attention')
         self.plot_path_attentionstats = os.path.join('plots', run_id, 'FigS2_attentionstats')
-        
+        self.plot_path_nichespace = os.path.join('plots', run_id, 'Fig4_nichespace')
+        self.plot_path_envcorrelation = os.path.join('plots', run_id, 'FigS3_envcorrelation')
+        self.plot_path_df_species = os.path.join(self.plot_path_nichespace, 'df_species')
+        self.plot_path_nichespace_h5 = os.path.join(self.plot_path_nichespace, 'h5')
+        self.plot_path_nichespace_png_sp = os.path.join(self.plot_path_nichespace, 'png', '[SPECIES]')
         
         
         # 輸出路徑
         # output path
         self.avg_elev_path = os.path.join(self.plot_path_embedding_dimension_reduction, 'avg_elevation.csv')
         self.df_attention_path = os.path.join(self.plot_path_attention, 'df_attention.csv')
+        self.df_env_corr_path = os.path.join(self.plot_path_nichespace, 'env_correlation.csv')
+        self.df_env_pca_path = os.path.join(self.plot_path_nichespace, 'df_env_pca.feather')
+        self.pc_info_path = os.path.join(self.plot_path_nichespace, 'pc_info.yaml')
+        self.bin_info_path = os.path.join(self.plot_path_nichespace, 'bin_info.yaml')
+        self.extent_info_path = os.path.join(self.plot_path_nichespace, 'extent_info.yaml')
+        self.df_grid_path = os.path.join(self.plot_path_nichespace, 'df_grid.feather')
+        self.df_spearman_path = os.path.join(self.plot_path_nichespace, 'df_spearman.csv')
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
         
         
         
@@ -220,16 +276,478 @@ class PlotUtlis():
         habitat = [species_habitat_df.measurementType[species_habitat_df.scientificName == sp].values.tolist()[0] for sp in df_attention_sp_name]
         
         return habitat
+           
+    # For Fig4
+    def set_df_env(self):
+        df_env = pd.DataFrame()
+        for date in self.date_list_train:
+            df_date = pd.DataFrame()
+            for env in self.env_list:
+                env_path = os.path.join(self.env_info['dir_base'], self.env_info['info'][env][date]['tif_span_avg'])
+                with rasterio.open(env_path, 'r') as f:
+                    if env in self.DeepSDM_conf.training_conf['non_normalize_env_list']:
+                        env_value = (f.read(1))[self.extent_binary == 1].flatten()
+                    env_value = ((f.read(1))[self.extent_binary == 1].flatten() - self.env_info['info'][env]['mean']) / self.env_info['info'][env]['sd']
+                df_date[env] = env_value
+            df_env = pd.concat([df_env, df_date], ignore_index = True)
+        
+        return df_env
+    
+    # For Fig4
+    def set_df_env_pca(self, pca):
+        # Initialize final DataFrame
+        df_env_pca = []
+
+        # Load all raster data once and process
+        for date in self.date_list_train:
+            print(f'\rProcessing date: {date}', end='')
+            env_data = []
+            original_col_names = []  # Temporary column names
+            final_col_names = []     # Column names for final save
+
+            for env in self.env_list:
+                # Construct file path for raster
+                env_path = os.path.join(self.env_info['dir_base'], self.env_info['info'][env][date]['tif_span_avg'])
+
+                # Load raster data
+                with rasterio.open(env_path, 'r') as f:
+                    raster_data = f.read(1)[self.extent_binary == 1].flatten()
+
+                # Normalize environmental data
+                if env not in self.DeepSDM_conf.training_conf['non_normalize_env_list']:
+                    raster_data = (raster_data - self.env_info['info'][env]['mean']) / self.env_info['info'][env]['sd']
+
+                env_data.append(raster_data)
+                original_col_names.append(f'{env}')  # Temporary name
+                final_col_names.append(f'{env}_{date}')  # Final name
+
+            # Combine all environmental variables into a single DataFrame with temporary names
+            df_season = pd.DataFrame(np.array(env_data).T, columns = original_col_names)
+
+            # Apply PCA to the entire batch
+            df_pca = pd.DataFrame(
+                data = pca.transform(df_season), 
+                columns=[f'PC{i+1:02d}_{date}' for i in range(len(pca.components_))]
+            )
+
+            # Rename columns to final names for saving
+            df_season.columns = final_col_names
+
+            # Append processed data to the list
+            df_env_pca.append(pd.concat([df_season, df_pca], axis = 1))
+
+        # Combine all results into a single DataFrame
+        df_env_pca = pd.concat(df_env_pca, axis = 1, ignore_index = False)
+
+        # Save DataFrame to feather
+        feather.write_dataframe(df_env_pca, self.df_env_pca_path)
+        
+        return df_env_pca
+        print("\nProcessing complete. File saved.")        
+        
+    # For Fig4
+    def set_df_species(self):
+        
+        create_folder(self.plot_path_df_species)
+        
+        # Function to process a single species
+        def process_species(species):
+            print(f'Processing: {species}')
+            series_dict = {}
+
+            # Maxent all_all prediction
+            maxent_h5_species_path = self.maxent_h5_path.replace('[SPECIES]', species)
+            if os.path.exists(maxent_h5_species_path):
+                with h5py.File(maxent_h5_species_path, 'r') as hf:
+                    maxent_all_all_value = (hf['all'][:])[self.extent_binary == 1].flatten()
+                    series_dict[f'maxent_all_all_{species}'] = maxent_all_all_value
+
+            # Process predictions for all dates
+            for date in self.date_list_predict:
+                deepsdm_h5_species_path = self.deepsdm_h5_path.replace('[SPECIES]', species)
+                if os.path.exists(deepsdm_h5_species_path):
+                    with h5py.File(deepsdm_h5_species_path, 'r') as hf:
+                        deepsdm_all_month_value = (hf[date][:])[self.extent_binary == 1].flatten()
+                        series_dict[f'deepsdm_all_month_{species}_{date}'] = deepsdm_all_month_value
+
+                if os.path.exists(maxent_h5_species_path):
+                    with h5py.File(maxent_h5_species_path, 'r') as hf:
+                        maxent_all_month_value = (hf[date][:])[self.extent_binary == 1].flatten()
+                        series_dict[f'maxent_all_month_{species}_{date}'] = maxent_all_month_value
+
+                # Occurrence points
+                occ_path = os.path.join(self.sp_info['dir_base'], self.sp_info['file_name'][species][date])
+                if os.path.exists(occ_path):
+                    with rasterio.open(occ_path, 'r') as f:
+                        occ_value = (f.read(1))[self.extent_binary == 1].flatten()
+                        series_dict[f'occ_{species}_{date}'] = occ_value.astype(int)
+
+            # Combine all data into a single DataFrame
+            df_species = pd.DataFrame(series_dict)
+
+            # Save to .feather file
+            output_path = os.path.join(self.plot_path_df_species, f'{species}.feather')
+            feather.write_dataframe(df_species, output_path)
+            print(f'Finished: {species}')
+
+        # Parallelize processing for all species
+        with ThreadPoolExecutor(max_workers=32) as executor:  # Adjust max_workers based on CPU cores
+            executor.map(process_species, self.species_list_predict)
+
+        print("All species processed successfully!")
+        
+    # For Fig4
+    def set_pc_bin_extent_info(self, df_env_pca):
+        # 各個pc軸的最大值與最小值
+        pc_info = dict(
+            **{
+                f'PC{(n_pc+1):02d}_max': df_env_pca.loc[:, df_env_pca.columns.str.startswith(f'PC{(n_pc+1):02d}')].max().max().tolist() for n_pc in range(len(self.env_list))
+            }, 
+            **{
+                f'PC{(n_pc+1):02d}_min': df_env_pca.loc[:, df_env_pca.columns.str.startswith(f'PC{(n_pc+1):02d}')].min().min().tolist() for n_pc in range(len(self.env_list))
+            }
+        )
+
+        # 各個pc軸的切割raster資訊
+        bin_info = {
+            f'PC{(n_pc+1):02d}_bins': np.linspace(pc_info[f'PC{(n_pc+1):02d}_min'], pc_info[f'PC{(n_pc+1):02d}_max'], num = self.niche_rst_size + 1) for n_pc in range(len(self.env_list))
+        }
+        bin_info_list = {key: bin_info[key].tolist() for key in bin_info}
+
+        # 切割完raster後的extent資訊
+        extent_info = dict(
+            **{
+                f'PC{(n_pc+1):02d}_extent_max': ((bin_info[f'PC{(n_pc+1):02d}_bins'][1:] + bin_info[f'PC{(n_pc+1):02d}_bins'][:-1])/2)[-1].tolist() for n_pc in range(len(self.env_list))
+            }, 
+            **{
+                f'PC{(n_pc+1):02d}_extent_min': ((bin_info[f'PC{(n_pc+1):02d}_bins'][1:] + bin_info[f'PC{(n_pc+1):02d}_bins'][:-1])/2)[0].tolist() for n_pc in range(len(self.env_list))
+            }
+        )
+
+        with open(self.pc_info_path, 'w') as yaml_file:
+            yaml.dump(pc_info, yaml_file)
+        with open(self.bin_info_path, 'w') as yaml_file:
+            yaml.dump(bin_info_list, yaml_file)
+        with open(self.extent_info_path, 'w') as yaml_file:
+            yaml.dump(extent_info, yaml_file)
+            
+        return pc_info, bin_info_list, extent_info
+    
+    # For Fig4
+    def set_df_grid(self, df_env_pca, bin_info):
+        
+        df_grid = pd.DataFrame()
+        for n_pc in range(len(self.env_list)):
+            df_env_pca_pc = df_env_pca.filter(regex=f'^PC{(n_pc+1):02d}')
+
+            def apply_cut(column):
+                return pd.cut(column, 
+                              bins = bin_info[f'PC{(n_pc+1):02d}_bins'], 
+                              labels = False, 
+                              include_lowest = True)
+
+            grid = df_env_pca_pc.apply(apply_cut)
+            grid.columns = [f'{col}_grid' for col in grid.columns]
+
+            df_grid = pd.concat([df_grid, grid], axis = 1)
+        
+        return df_grid
+        
+    # For Fig4
+    def create_species_nichespace(self, x_pca = 1, y_pca = 1):
+        
+        create_folder(self.plot_path_nichespace_h5)
+
+        df_grid = feather.read_dataframe(self.df_grid_path)
+        
+        for species in self.species_list_predict:
+
+            create_folder(self.plot_path_nichespace_png_sp.replace('[SPECIES]', species))
+
+            df_species = feather.read_dataframe(os.path.join(self.plot_path_df_species, f'{species}.feather'))
+            df_species = pd.concat([df_species, df_grid], axis = 1)
+
+            # season
+            season_sp_date = [(species, d) for d in self.date_list_predict]
+            grid_deepsdm_all_month_sum = np.zeros((self.niche_rst_size, self.niche_rst_size))
+            grid_deepsdm_all_month_count = np.zeros((self.niche_rst_size, self.niche_rst_size))
+            grid_deepsdm_all_month_max = np.zeros((self.niche_rst_size, self.niche_rst_size))
+            grid_maxent_all_month_sum = np.zeros((self.niche_rst_size, self.niche_rst_size))
+            grid_maxent_all_month_count = np.zeros((self.niche_rst_size, self.niche_rst_size))
+            grid_maxent_all_month_max = np.zeros((self.niche_rst_size, self.niche_rst_size))
+            
+            for (sp, d) in season_sp_date:
+                # calculate grid values
+                grouped = df_species.groupby([f'PC{x_pca:02d}_{d}_grid', f'PC{y_pca:02d}_{d}_grid'])
+
+                # deepsdm all_month
+                grid_deepsdm_all_month_sum_d = np.zeros((self.niche_rst_size, self.niche_rst_size))
+                grid_deepsdm_all_month_count_d = np.zeros((self.niche_rst_size, self.niche_rst_size))
+                grid_deepsdm_all_month_max_d = np.zeros((self.niche_rst_size, self.niche_rst_size))
+
+                try:
+                    max_values_deepsdm_all_month = grouped[f'deepsdm_all_month_{sp}_{d}'].max()
+                    sum_values_deepsdm_all_month = grouped[f'deepsdm_all_month_{sp}_{d}'].sum()
+                    mean_values_deepsdm_all_month = grouped[f'deepsdm_all_month_{sp}_{d}'].mean()
+                    count_values_deepsdm_all_month = grouped[f'deepsdm_all_month_{sp}_{d}'].count()
+                    for (x, y), value in max_values_deepsdm_all_month.items():
+                        grid_deepsdm_all_month_max_d[self.niche_rst_size-1-y, x] = value
+                    for (x, y), value in count_values_deepsdm_all_month.items():
+                        grid_deepsdm_all_month_count_d[self.niche_rst_size-1-y, x] = value
+                    for (x, y), value in sum_values_deepsdm_all_month.items():
+                        grid_deepsdm_all_month_sum_d[self.niche_rst_size-1-y, x] = value                                                 
+                except KeyError:
+                    pass
+                grid_deepsdm_all_month_max = np.nanmax([grid_deepsdm_all_month_max, grid_deepsdm_all_month_max_d], axis = 0)
+                grid_deepsdm_all_month_count = grid_deepsdm_all_month_count + grid_deepsdm_all_month_count_d
+                grid_deepsdm_all_month_sum = grid_deepsdm_all_month_sum + grid_deepsdm_all_month_sum_d
+
+                # maxent all_month
+                grid_maxent_all_month_sum_d = np.zeros((self.niche_rst_size, self.niche_rst_size))
+                grid_maxent_all_month_count_d = np.zeros((self.niche_rst_size, self.niche_rst_size))
+                grid_maxent_all_month_max_d = np.zeros((self.niche_rst_size, self.niche_rst_size))
+                try:
+                    max_values_maxent_all_month = grouped[f'maxent_all_month_{sp}_{d}'].max()
+                    sum_values_maxent_all_month = grouped[f'maxent_all_month_{sp}_{d}'].sum()
+                    mean_values_maxent_all_month = grouped[f'maxent_all_month_{sp}_{d}'].mean()
+                    count_values_maxent_all_month = grouped[f'maxent_all_month_{sp}_{d}'].count()
+                    for (x, y), value in max_values_maxent_all_month.items():
+                        grid_maxent_all_month_max_d[self.niche_rst_size-1-y, x] = value
+                    for (x, y), value in count_values_maxent_all_month.items():
+                        grid_maxent_all_month_count_d[self.niche_rst_size-1-y, x] = value
+                    for (x, y), value in sum_values_maxent_all_month.items():
+                        grid_maxent_all_month_sum_d[self.niche_rst_size-1-y, x] = value                                                 
+                except KeyError:
+                    pass
+                grid_maxent_all_month_max = np.nanmax([grid_maxent_all_month_max, grid_maxent_all_month_max_d], axis = 0)
+                grid_maxent_all_month_count = grid_maxent_all_month_count + grid_maxent_all_month_count_d
+                grid_maxent_all_month_sum = grid_maxent_all_month_sum + grid_maxent_all_month_sum_d
+
+
+            grid_maxent_all_month_count = np.where(grid_maxent_all_month_count == 0, 1, grid_maxent_all_month_count)
+            grid_deepsdm_all_month_count = np.where(grid_deepsdm_all_month_count == 0, 1, grid_deepsdm_all_month_count)
+
+            grid_deepsdm_all_month_mean = grid_deepsdm_all_month_sum / grid_deepsdm_all_month_count
+            grid_maxent_all_month_mean = grid_maxent_all_month_sum / grid_maxent_all_month_count
+
+            cv2.imwrite(os.path.join(self.plot_path_nichespace_png_sp.replace('[SPECIES]', species), f'{species}_deepsdm_all_month_nichespace_max.png'), png_operation(grid_deepsdm_all_month_max))
+            cv2.imwrite(os.path.join(self.plot_path_nichespace_png_sp.replace('[SPECIES]', species), f'{species}_deepsdm_all_month_nichespace_mean.png'), png_operation(grid_deepsdm_all_month_mean))
+            cv2.imwrite(os.path.join(self.plot_path_nichespace_png_sp.replace('[SPECIES]', species), f'{species}_deepsdm_all_month_nichespace_sum.png'), png_operation(grid_deepsdm_all_month_sum))
+
+            cv2.imwrite(os.path.join(self.plot_path_nichespace_png_sp.replace('[SPECIES]', species), f'{species}_maxent_all_month_nichespace_max.png'), png_operation(grid_maxent_all_month_max))
+            cv2.imwrite(os.path.join(self.plot_path_nichespace_png_sp.replace('[SPECIES]', species), f'{species}_maxent_all_month_nichespace_mean.png'), png_operation(grid_maxent_all_month_mean))
+            cv2.imwrite(os.path.join(self.plot_path_nichespace_png_sp.replace('[SPECIES]', species), f'{species}_maxent_all_month_nichespace_sum.png'), png_operation(grid_maxent_all_month_sum))
+
+
+            logh5_info = {'deepsdm_all_month_max': grid_deepsdm_all_month_max, 
+                          'deepsdm_all_month_mean': grid_deepsdm_all_month_mean, 
+                          'deepsdm_all_month_sum': grid_deepsdm_all_month_sum, 
+                          'maxent_all_month_max': grid_maxent_all_month_max, 
+                          'maxent_all_month_mean': grid_maxent_all_month_mean,   
+                          'maxent_all_month_sum': grid_maxent_all_month_sum}
+            for key, data in logh5_info.items():
+                with h5py.File(os.path.join(self.plot_path_nichespace_h5, f'{species}.h5'), 'a') as hf:
+                    if key in hf:
+                        del hf[key]
+                    hf.create_dataset(key, data = data)
+        
+    # For Fig4
+    def calculate_spearman(self, extent_info, x_pca = 1, y_pca = 2):
+        extent = [extent_info[f'PC{x_pca:02d}_extent_min'], 
+                  extent_info[f'PC{x_pca:02d}_extent_max'], 
+                  extent_info[f'PC{y_pca:02d}_extent_min'], 
+                  extent_info[f'PC{y_pca:02d}_extent_max']]
+
+        # 計算每個像素的中心點坐標
+        cell_width = (extent[1] - extent[0]) / self.niche_rst_size
+        cell_height = (extent[3] - extent[2]) / self.niche_rst_size
+        coordinates_values = {'center_x': [], 'center_y': []}
+        for i in range(self.niche_rst_size):
+            for j in range(self.niche_rst_size):
+                coordinates_values['center_x'].append(extent[0] + j * cell_width + cell_width / 2)  # center_x
+                coordinates_values['center_y'].append(extent[3] - i * cell_height - cell_height / 2) # center_y
+
+        df_coords = pd.DataFrame(coordinates_values)
+        df_spearman = pd.DataFrame({'model': [], 'species': [], 'rho': [], 'p': []})
+
+        for species in self.species_list_predict:
+            print(f'\r{species}', end = '')
+
+            with h5py.File(os.path.join(self.plot_path_nichespace_h5, f'{species}.h5'), 'r') as hf:
+                grid_deepsdm_all_month_max = hf['deepsdm_all_month_max'][:]
+                grid_deepsdm_all_month_mean = hf['deepsdm_all_month_mean'][:]
+                grid_deepsdm_all_month_sum = hf['deepsdm_all_month_sum'][:]
+                grid_maxent_all_month_max = hf['maxent_all_month_max'][:]
+                grid_maxent_all_month_mean = hf['maxent_all_month_mean'][:]
+                grid_maxent_all_month_sum = hf['maxent_all_month_sum'][:]
+
+            # 初始化結果表
+            centroids = []
+            centroid_dict = {}
+
+            # 處理每個 raster
+            for raster_name, grid in {
+                'deepsdm_max': grid_deepsdm_all_month_max,
+                'deepsdm_mean': grid_deepsdm_all_month_mean,
+                'deepsdm_sum': grid_deepsdm_all_month_sum,
+                'maxent_max': grid_maxent_all_month_max,
+                'maxent_mean': grid_maxent_all_month_mean,
+                'maxent_sum': grid_maxent_all_month_sum,
+            }.items():
+                centroid_x, centroid_y = calculate_weighted_centroid(grid, extent)
+                centroids.append({'raster': raster_name, 'centroid_x': centroid_x, 'centroid_y': centroid_y})
+                centroid_dict[raster_name] = (centroid_x, centroid_y)
+
+
+            # 遍歷每個 raster 計算 Mahalanobis 距離
+            for raster_name, grid in {
+                'deepsdm_max': grid_deepsdm_all_month_max,
+                'deepsdm_mean': grid_deepsdm_all_month_mean,
+                'deepsdm_sum': grid_deepsdm_all_month_sum,
+                'maxent_max': grid_maxent_all_month_max,
+                'maxent_mean': grid_maxent_all_month_mean,
+                'maxent_sum': grid_maxent_all_month_sum,
+            }.items():
+                # 獲取對應 raster 的 centroid
+                centroid_x, centroid_y = centroid_dict[raster_name]
+
+                # 計算到該 centroid 的 Mahalanobis 距離
+                df_cor = df_coords.copy()
+                df_cor['value'] = grid.flatten()
+
+                valid_df = df_cor[df_cor['value'] > 0].reset_index(drop = True)
+                valid_coords = valid_df[['center_x', 'center_y']].values
+
+                # 計算協方差矩陣和逆矩陣
+                cov_matrix = np.cov(valid_coords, rowvar = False)
+                inv_cov_matrix = np.linalg.inv(cov_matrix)
+
+                # Mahalanobis 距離計算
+                valid_df['distance_mah'] = valid_df[['center_x', 'center_y']].apply(
+                    lambda row: mahalanobis(row, (centroid_x, centroid_y), inv_cov_matrix), axis = 1
+                )
+
+                # 計算 Spearman 相關係數
+                rho, p = spearmanr(valid_df['distance_mah'], valid_df['value'])
+
+                # 記錄到 DataFrame
+                df_spearman.loc[len(df_spearman)] = [raster_name, species, rho, p]
+
+            # 保存 Spearman 結果
+            df_spearman.to_csv(self.df_spearman_path, index=False)
+        
+        return df_spearman
+    
+    # Fig4
+    def calculate_rho_niche_coocccounts(self):
+        
+        # 预加载文件到内存
+        def preload_nichespace_files(coocc_counts):
+            nichespace_cache = {}
+            unique_species = set(coocc_counts['sp1']).union(set(coocc_counts['sp2']))
+
+            for species in unique_species:
+                with h5py.File(os.path.join(self.plot_path_nichespace_h5, f'{species}.h5'), 'r') as hf:
+                    for model, suffix in [('deepsdm', 'max'), ('maxent', 'max')]:
+                        rst = hf[f'{model}_all_month_{suffix}'][:]
+                        nichespace_cache[(species, model)] = rst[rst > 0]
+            return nichespace_cache
+        
+        def process_row(data, nichespace_cache):
+            try:
+                # 获取缓存中的栖息空间数据
+                niche_space_deepsdm = [nichespace_cache[(sp, 'deepsdm')] for sp in [data.sp1, data.sp2]]
+                niche_space_maxent = [nichespace_cache[(sp, 'maxent')] for sp in [data.sp1, data.sp2]]
+                # 检查是否有数据缺失
+
+                if any(ns is None for ns in niche_space_deepsdm) or any(ns is None for ns in niche_space_maxent):
+                    return None
+
+                # 计算 Cosine Similarity
+                cosine_deepsdm = cosine_similarity_manual(niche_space_deepsdm[0], niche_space_deepsdm[1])
+                cosine_maxent = cosine_similarity_manual(niche_space_maxent[0], niche_space_maxent[1])
+
+                return data.counts, cosine_deepsdm, cosine_maxent
+            except Exception as e:
+                return None
         
         
+        coocc_counts_filter = self.coocc_counts[(self.coocc_counts.sp1.isin(self.species_list_predict)) & 
+                                                (self.coocc_counts.sp2.isin(self.species_list_predict)) & 
+                                                (self.coocc_counts.sp1 != self.coocc_counts.sp2) & 
+                                                (self.coocc_counts.counts != 0)].reset_index(drop = True)
         
         
+        # 预加载栖息空间文件
+        print("Preloading nichespace files...")
+        nichespace_cache = preload_nichespace_files(coocc_counts_filter)
+        #     print(nichespace_cache)
+        # 并行处理每一行数据
+        print("Processing co-occurrence data...")
+
+        results = Parallel(n_jobs=-1)(
+            delayed(process_row)(data, nichespace_cache) for _, data in coocc_counts_filter.iterrows()
+        )
+        # 收集结果
+        valid_results = [r for r in results if r is not None]
+
+        # 检查 valid_results 是否为空
+        if not valid_results:
+            print("No valid results were returned. Please check the input data or processing logic.")
+        else:
+            # 解包结果
+            counts, deepsdm_cosine, maxent_cosine = zip(*valid_results)
+
+            # 计算 Spearman 相关系数
+            rho_cosine_deepsdm, p_cosine_deepsdm = spearmanr(np.array(deepsdm_cosine), np.array(counts))
+            rho_cosine_maxent, p_cosine_maxent = spearmanr(np.array(maxent_cosine), np.array(counts))
+
+            # 输出结果
+            print(f'rho of deepsdm: {rho_cosine_deepsdm}, p-value: {p_cosine_deepsdm}')
+            print(f'rho of maxent: {rho_cosine_maxent}, p-value: {p_cosine_maxent}')
+            
+            return rho_cosine_deepsdm, p_cosine_deepsdm, rho_cosine_maxent, p_cosine_maxent
         
+    # For Fig4
+    def merge_performance_indicator(self):
         
+        # 設定檔案路徑並讀取數據
+        files = glob.glob(self.performance_indicator_singlethreshold)
+        indicator_singlethreshold = pd.concat([pd.read_csv(f) for f in files], ignore_index = True)
+
+        files = glob.glob(self.performance_indicator_multithreshold)
+        indicator_multithreshold = pd.concat([pd.read_csv(f) for f in files], ignore_index = True)
+
+        indicator_multithreshold[['species', 'date']] = indicator_multithreshold['spdate'].str.rsplit('_', n = 1, expand = True)
+
+        # 確保日期格式一致
+        indicator_multithreshold['date'] = pd.to_datetime(indicator_multithreshold['date'])
+        indicator_singlethreshold['date'] = pd.to_datetime(indicator_singlethreshold['date'])
+
+        # 選擇要合併的欄位
+        columns_to_merge = [
+            'species', 'date', 
+            'maxent_all_season_val', 'maxent_all_season_train', 'maxent_all_season_all',
+            'deepsdm_all_season_val', 'deepsdm_all_season_train', 'deepsdm_all_season_all'
+        ]
+        indicator_multithreshold_subset = indicator_multithreshold[columns_to_merge]
+
+        # 合併 DataFrame
+        indicator_merged = indicator_singlethreshold.merge(indicator_multithreshold_subset, on=['species', 'date'], how='left')
         
+        # 將指標重新命名，將 AUC 指標明確顯示為 AUC
+        indicator_merged.rename(columns={
+            'deepsdm_all_season_val': 'DeepSDM_AUC', 
+            'maxent_all_season_val': 'MaxEnt_AUC', 
+            'deepsdm_val_TSS': 'DeepSDM_TSS',
+            'maxent_val_TSS': 'MaxEnt_TSS',
+            'deepsdm_val_kappa': 'DeepSDM_Kappa',
+            'maxent_val_kappa': 'MaxEnt_Kappa',
+            'deepsdm_val_f1': 'DeepSDM_F1',
+            'maxent_val_f1': 'MaxEnt_F1'
+        }, inplace=True)
         
-        
-        
+        return indicator_merged
         
         
         
@@ -406,3 +924,79 @@ def reorder_df_attention(df_attention, env_order = 'LandcoverPC1'):
     df_attention_order.index = [f"{sp.split('_')[0]} {sp.split('_')[1]}" for sp in list(df_attention_order.index)]
     
     return df_attention_order
+
+# Fig4
+def calculate_weighted_centroid(grid, extent):
+    """
+    計算 raster 的加權中心
+    :param grid: numpy array, raster 數值 (2D)
+    :param extent: [xmin, xmax, ymin, ymax], 地理範圍
+    :return: (centroid_x, centroid_y)
+    """
+    # 創建格點的地理座標
+    rows, cols = grid.shape
+    x_coords = np.linspace(extent[0], extent[1], cols)
+    y_coords = np.linspace(extent[3], extent[2], rows)
+    x_grid, y_grid = np.meshgrid(x_coords, y_coords)
+
+    # 展平數據，方便計算
+    values = grid.flatten()
+    x_flat = x_grid.flatten()
+    y_flat = y_grid.flatten()
+
+    # 過濾有效值（例如忽略值為零的像素）
+    valid_mask = values > 0  # 僅考慮數值大於 0 的像素
+    values = values[valid_mask]
+    x_flat = x_flat[valid_mask]
+    y_flat = y_flat[valid_mask]
+
+    # 計算加權中心
+    weighted_x = np.sum(values * x_flat) / np.sum(values)
+    weighted_y = np.sum(values * y_flat) / np.sum(values)
+
+    return weighted_x, weighted_y
+
+
+def cosine_similarity_manual(vec1, vec2):
+    dot_product = np.dot(vec1, vec2)
+    norm_product = np.linalg.norm(vec1) * np.linalg.norm(vec2)
+    return dot_product / norm_product if norm_product != 0 else 0
+
+# Fig4
+def get_performance_stats(indicator_merged):
+    
+    # 定義指標名稱和相應的欄位
+    indicators = {
+        'AUC': ('DeepSDM_AUC', 'MaxEnt_AUC'), 
+        'F1': ('DeepSDM_F1', 'MaxEnt_F1'),
+        'TSS': ('DeepSDM_TSS', 'MaxEnt_TSS'),
+        "Cohen's Kappa": ('DeepSDM_Kappa', 'MaxEnt_Kappa')
+    }
+    
+    # 準備數據
+    data_deepsdm = []
+    data_maxent = []
+    ticks = []
+    significance_stars = []
+    n = []
+    t_stats = []
+    p_values = []
+
+    for indicator_name, (col_deepsdm, col_maxent) in indicators.items():
+        # 篩選有效數據
+        indicator_filtered = indicator_merged[(indicator_merged[col_deepsdm] != -9999) & (indicator_merged[col_deepsdm].notna()) &
+                                              (indicator_merged[col_maxent] != -9999) & (indicator_merged[col_maxent].notna())]
+        n.append(len(indicator_filtered))
+
+        # 添加數據至列表
+        data_deepsdm.append(indicator_filtered[col_deepsdm].values)
+        data_maxent.append(indicator_filtered[col_maxent].values)
+        ticks.append(indicator_name)
+
+        # 計算 t 檢定並獲取顯著性標示
+        t_stat, p_value = ttest_rel(indicator_filtered[col_deepsdm], indicator_filtered[col_maxent])
+        significance_stars.append(get_significance_stars(p_value))
+        t_stats.append(t_stat)
+        p_values.append(p_value)
+        
+    return data_deepsdm, data_maxent, ticks, significance_stars, n, t_stats, p_values
