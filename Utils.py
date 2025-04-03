@@ -98,6 +98,10 @@ class PlotUtlis():
         }
         self.env_list_detail = [env_list_change[i] for i in self.env_list]
         
+        self.x_pca = 1
+        self.y_pca = 2
+        
+        
         
         
         # 子資料夾路徑
@@ -107,9 +111,6 @@ class PlotUtlis():
         self.plot_path_attentionstats = os.path.join('plots', run_id, 'FigS2_attentionstats')
         self.plot_path_nichespace = os.path.join('plots', run_id, 'Fig4_nichespace')
         self.plot_path_envcorrelation = os.path.join('plots', run_id, 'FigS3_envcorrelation')
-        self.plot_path_df_species = os.path.join(self.plot_path_nichespace, 'df_species', '[SPECIES].feather')
-        self.plot_path_nichespace_h5 = os.path.join(self.plot_path_nichespace, 'h5', '[SPECIES].h5')
-        self.plot_path_nichespace_png_sp = os.path.join(self.plot_path_nichespace, 'png', '[SPECIES]', '[SPECIES]_nichespace_[SUFFIX].png')
         self.plot_path_nichespace_clustering = os.path.join('plots', run_id, 'Fig5_nichespace_clustering')
         self.plot_path_nichespace_clustering_test = os.path.join('plots', run_id, 'FigS4_nichespace_clustering_test')
         
@@ -118,13 +119,19 @@ class PlotUtlis():
         # output path
         self.avg_elev_path = os.path.join(self.plot_path_embedding_dimension_reduction, 'avg_elevation.csv')
         self.df_attention_path = os.path.join(self.plot_path_attention, 'df_attention.csv')
+        self.env_pca_loadings_path = os.path.join(self.plot_path_nichespace, 'env_pca_loadings.csv')
         self.df_env_corr_path = os.path.join(self.plot_path_nichespace, 'env_correlation.csv')
         self.df_env_pca_path = os.path.join(self.plot_path_nichespace, 'df_env_pca.feather')
         self.pc_info_path = os.path.join(self.plot_path_nichespace, 'pc_info.yaml')
         self.bin_info_path = os.path.join(self.plot_path_nichespace, 'bin_info.yaml')
         self.extent_info_path = os.path.join(self.plot_path_nichespace, 'extent_info.yaml')
+        self.plot_path_df_species = os.path.join(self.plot_path_nichespace, 'df_species', '[SPECIES].feather')
+        self.plot_path_nichespace_h5 = os.path.join(self.plot_path_nichespace, 'h5', '[SPECIES].h5')
+        self.plot_path_nichespace_png_sp = os.path.join(self.plot_path_nichespace, 'png', '[SPECIES]', '[SPECIES]_nichespace_[SUFFIX].png')        
         self.df_grid_path = os.path.join(self.plot_path_nichespace, 'df_grid.feather')
         self.df_spearman_path = os.path.join(self.plot_path_nichespace, 'df_spearman.csv')
+        self.cluster_avg_nichespace_path = os.path.join(self.plot_path_nichespace_clustering, 'cluster_avg_nichespace.yaml')
+        self.df_nichespace_center_coordinate_path = os.path.join(self.plot_path_nichespace_clustering, 'nichespecies_center_coordinate.csv')
         
         
         
@@ -158,7 +165,8 @@ class PlotUtlis():
         
         
         
-        
+        self.load_existing_files()
+
         
         
     # For Fig2
@@ -456,7 +464,7 @@ class PlotUtlis():
         return df_grid
         
     # For Fig4
-    def create_species_nichespace(self, x_pca = 1, y_pca = 1):
+    def create_species_nichespace(self):
         
         create_folder(os.path.dirname(self.plot_path_nichespace_h5))
 
@@ -480,7 +488,7 @@ class PlotUtlis():
             
             for (sp, d) in season_sp_date:
                 # calculate grid values
-                grouped = df_species.groupby([f'PC{x_pca:02d}_{d}_grid', f'PC{y_pca:02d}_{d}_grid'])
+                grouped = df_species.groupby([f'PC{self.x_pca:02d}_{d}_grid', f'PC{self.y_pca:02d}_{d}_grid'])
 
                 # deepsdm all_month
                 grid_deepsdm_all_month_sum_d = np.zeros((self.niche_rst_size, self.niche_rst_size))
@@ -558,11 +566,11 @@ class PlotUtlis():
                     hf.create_dataset(key, data = data)
         
     # For Fig4
-    def calculate_spearman(self, extent_info, x_pca = 1, y_pca = 2):
-        extent = [extent_info[f'PC{x_pca:02d}_extent_min'], 
-                  extent_info[f'PC{x_pca:02d}_extent_max'], 
-                  extent_info[f'PC{y_pca:02d}_extent_min'], 
-                  extent_info[f'PC{y_pca:02d}_extent_max']]
+    def calculate_spearman(self, extent_info):
+        extent = [extent_info[f'PC{self.x_pca:02d}_extent_min'], 
+                  extent_info[f'PC{self.x_pca:02d}_extent_max'], 
+                  extent_info[f'PC{self.y_pca:02d}_extent_min'], 
+                  extent_info[f'PC{self.y_pca:02d}_extent_max']]
 
         # 計算每個像素的中心點坐標
         cell_width = (extent[1] - extent[0]) / self.niche_rst_size
@@ -777,6 +785,200 @@ class PlotUtlis():
         
         return nichespace_deepsdm_all, nichespace_deepsdm_all_nonflatten
         
+    # For Fig5
+    def get_all_cluster_average_nichespace(self, cluster_labels, nichespace_deepsdm_all_nonflatten):
+        unique_clusters = sorted(set(cluster_labels))
+
+        all_cluster_avg_nichespace = []
+        for target_cluster in unique_clusters:
+            species_in_cluster = [sp for sp, label in zip(self.species_list_predict, cluster_labels) if label == target_cluster]
+
+            niche_sum = None
+            valid_species_count = 0
+            for sp in species_in_cluster:
+                i_sp = self.species_list_predict.index(sp)
+                niche_image = nichespace_deepsdm_all_nonflatten[i_sp]
+                if niche_sum is None:
+                    niche_sum = niche_image
+                else:
+                    niche_sum += niche_image
+                valid_species_count += 1
+
+            if valid_species_count > 0 and niche_sum is not None:
+                niche_avg = niche_sum / valid_species_count
+                all_cluster_avg_nichespace.append((target_cluster, niche_avg))
+                print(f'Cluster {target_cluster} - Average niche calculated from {valid_species_count} species.')
+
+            else:
+                print(f'No valid niche images found for Cluster {target_cluster}')
+                continue
+
+        return all_cluster_avg_nichespace
+        
+        
+    # For Fig5
+    def calculate_deepsdm_nichespace_center(self, nichespace_deepsdm_all_nonflatten, cluster_labels):
+        center_allspecies = []
+        for i_sp in range(nichespace_deepsdm_all_nonflatten.shape[0]):
+
+            nichespace_species = nichespace_deepsdm_all_nonflatten[i_sp]
+
+            coordinates_values = {'center_x': [], 'center_y': [], 'value_deepsdm': []}
+            for i in range(self.niche_rst_size):
+                for j in range(self.niche_rst_size):
+                    coordinates_values['center_x'].append(self.nichespace_extent[0] + j * self.nichespace_cell_width + self.nichespace_cell_width / 2)  #center_x
+                    coordinates_values['center_y'].append(self.nichespace_extent[3] - i * self.nichespace_cell_height - self.nichespace_cell_height / 2) # center_y
+                    coordinates_values['value_deepsdm'].append(nichespace_species[i, j])  # value_deepsdm
+
+            df_cor = pd.DataFrame(coordinates_values).query('value_deepsdm > 0').reset_index(drop = True)    
+            df_cor_only = df_cor.loc[df_cor['value_deepsdm'] > 0, ['center_x', 'center_y']].reset_index(drop = True)
+
+            center_x = np.multiply(np.array(df_cor['center_x']), np.array(df_cor['value_deepsdm'])).sum() / np.array(df_cor['value_deepsdm']).sum()
+            center_y = np.multiply(np.array(df_cor['center_y']), np.array(df_cor['value_deepsdm'])).sum() / np.array(df_cor['value_deepsdm']).sum()
+            center = np.array([center_x, center_y])
+            center_allspecies.append(center)
+        
+        df_center = pd.DataFrame(np.vstack(center_allspecies), index = self.species_list_predict, columns = ['PC01', 'PC02'])
+        df_center['cluster'] = cluster_labels
+        
+        return df_center
+
+    # For Fig5
+    def calculate_correlation_center_maxvariance(self, df_center):
+        # 計算物種在 PC01 和 PC02 上的主成分變異量（協方差矩陣的特徵分解）
+        cov_matrix = np.cov(df_center[['PC01', 'PC02']].T)
+        eigenvalues, eigenvectors = np.linalg.eig(cov_matrix)
+
+        # 變異量最大的方向（對應於最大特徵值的特徵向量）
+        max_variance_index = np.argmax(eigenvalues)
+        max_variance_direction = eigenvectors[:, max_variance_index]
+
+        # 計算環境因子 loading 在 PC01 和 PC02 的投影
+        env_factors = self.env_pca_loadings[['PC01', 'PC02']].values
+        env_correlation = env_factors @ max_variance_direction
+        env_correlation_abs = np.abs(env_correlation)
+
+        # 變異量最大的方向（對應於最大特徵值的特徵向量）
+        max_variance_index = np.argmax(eigenvalues)
+        max_variance_direction = eigenvectors[:, max_variance_index]
+
+        # 計算最大變異方向的直線方程式 y = (v2/v1) * x
+        center_maxvarinace_slope = max_variance_direction[1] / max_variance_direction[0]
+
+        # 建立環境因子與最大變異方向相關性的 DataFrame
+        env_correlation_df = pd.DataFrame({
+            "Environmental Factor": self.env_pca_loadings.index,
+            "Correlation with Max Variance Direction": env_correlation
+        })
+
+        # 依相關性絕對值排序（降序）
+        env_correlation_df = env_correlation_df.reindex(env_correlation_abs.argsort()[::-1])
+        return env_correlation_df, center_maxvarinace_slope
+        
+    # For Fig5
+    def get_cluster_env_values(self, cluster_labels, env_plot):
+        env_value_cluster_all = []
+        for cluster in np.unique(cluster_labels):
+            species_list_cluster = np.array(self.species_list_predict)[np.array(cluster_labels) == cluster].tolist()
+            
+            env_value_cluster = []
+            for species in species_list_cluster:
+                df_species = feather.read_dataframe(self.plot_path_df_species.replace('[SPECIES]', species))
+
+                occ_value = df_species[sorted([key for key in df_species.keys() if key.startswith('occ')])].values.flatten()
+                env_value = self.df_env_pca[sorted([key for key in self.df_env_pca.keys() if key.startswith(env_plot)])].values.flatten()
+
+                mask = ~np.isnan(occ_value) & ~np.isnan(env_value)
+                occ_value = occ_value[mask]
+                env_value = env_value[mask]
+
+                i_threshold = np.where(occ_value == 1)[0]
+
+                env_value = env_value[i_threshold]
+                env_value_cluster.append(env_value)
+
+            env_value_cluster = np.concatenate(env_value_cluster)
+            env_value_cluster_all.append((cluster, env_value_cluster))
+        return env_value_cluster_all
+            
+        
+        
+        
+        
+        
+        
+        
+        
+        
+      
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
         
         
         
@@ -805,24 +1007,55 @@ class PlotUtlis():
         
         
         
+    def load_existing_files(self):
+        self.avg_elev = None
+        self.df_attention = None
+        self.df_env_corr = None
+        self.df_env_pca = None
+        self.pc_info = None
+        self.bin_info = None
+        self.extent_info = None
+        self.df_grid = None
+        self.df_spearman = None
+        self.cluster_avg_nichespace = None
+
+        # 逐一檢查檔案是否存在並讀取
+        if os.path.exists(self.avg_elev_path):
+            self.avg_elev = pd.read_csv(self.avg_elev_path)
+
+        if os.path.exists(self.df_attention_path):
+            self.df_attention = pd.read_csv(self.df_attention_path, index_col=0)
+
+        if os.path.exists(self.df_env_pca_path):
+            self.df_env_pca = feather.read_dataframe(self.df_env_pca_path)
+
+        if os.path.exists(self.pc_info_path):
+            with open(self.pc_info_path, 'r') as f:
+                self.pc_info = yaml.safe_load(f)
+
+        if os.path.exists(self.bin_info_path):
+            with open(self.bin_info_path, 'r') as f:
+                self.bin_info = yaml.safe_load(f)
+
+        if os.path.exists(self.extent_info_path):
+            with open(self.extent_info_path, 'r') as f:
+                self.extent_info = yaml.safe_load(f)
+            self.nichespace_extent = [self.extent_info[f'PC{self.x_pca:02d}_extent_min'], 
+                                      self.extent_info[f'PC{self.x_pca:02d}_extent_max'], 
+                                      self.extent_info[f'PC{self.y_pca:02d}_extent_min'], 
+                                      self.extent_info[f'PC{self.y_pca:02d}_extent_max']]
+            self.nichespace_cell_width = (self.nichespace_extent[1] - self.nichespace_extent[0]) / self.niche_rst_size
+            self.nichespace_cell_height = (self.nichespace_extent[3] - self.nichespace_extent[2]) / self.niche_rst_size
+
+        if os.path.exists(self.df_spearman_path):
+            self.df_spearman = pd.read_csv(self.df_spearman_path)
+
+        if os.path.exists(self.cluster_avg_nichespace_path):
+            with open(self.cluster_avg_nichespace_path, 'r') as f:
+                self.cluster_avg_nichespace = yaml.safe_load(f)        
         
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
+        if os.path.exists(self.env_pca_loadings_path):
+            self.env_pca_loadings = pd.read_csv(self.env_pca_loadings_path, index_col = 0)
         
         
 def create_folder(file_path):
