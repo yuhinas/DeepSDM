@@ -107,9 +107,11 @@ class PlotUtlis():
         self.plot_path_attentionstats = os.path.join('plots', run_id, 'FigS2_attentionstats')
         self.plot_path_nichespace = os.path.join('plots', run_id, 'Fig4_nichespace')
         self.plot_path_envcorrelation = os.path.join('plots', run_id, 'FigS3_envcorrelation')
-        self.plot_path_df_species = os.path.join(self.plot_path_nichespace, 'df_species')
-        self.plot_path_nichespace_h5 = os.path.join(self.plot_path_nichespace, 'h5')
-        self.plot_path_nichespace_png_sp = os.path.join(self.plot_path_nichespace, 'png', '[SPECIES]')
+        self.plot_path_df_species = os.path.join(self.plot_path_nichespace, 'df_species', '[SPECIES].feather')
+        self.plot_path_nichespace_h5 = os.path.join(self.plot_path_nichespace, 'h5', '[SPECIES].h5')
+        self.plot_path_nichespace_png_sp = os.path.join(self.plot_path_nichespace, 'png', '[SPECIES]', '[SPECIES]_nichespace_[SUFFIX].png')
+        self.plot_path_nichespace_clustering = os.path.join('plots', run_id, 'Fig5_nichespace_clustering')
+        self.plot_path_nichespace_clustering_test = os.path.join('plots', run_id, 'FigS4_nichespace_clustering_test')
         
         
         # 輸出路徑
@@ -348,7 +350,7 @@ class PlotUtlis():
     # For Fig4
     def set_df_species(self):
         
-        create_folder(self.plot_path_df_species)
+        create_folder(os.path.dirname(self.plot_path_df_species))
         
         # Function to process a single species
         def process_species(species):
@@ -386,7 +388,7 @@ class PlotUtlis():
             df_species = pd.DataFrame(series_dict)
 
             # Save to .feather file
-            output_path = os.path.join(self.plot_path_df_species, f'{species}.feather')
+            output_path = self.plot_path_df_species.replace('[SPECIES]', species)
             feather.write_dataframe(df_species, output_path)
             print(f'Finished: {species}')
 
@@ -456,15 +458,15 @@ class PlotUtlis():
     # For Fig4
     def create_species_nichespace(self, x_pca = 1, y_pca = 1):
         
-        create_folder(self.plot_path_nichespace_h5)
+        create_folder(os.path.dirname(self.plot_path_nichespace_h5))
 
         df_grid = feather.read_dataframe(self.df_grid_path)
         
         for species in self.species_list_predict:
 
-            create_folder(self.plot_path_nichespace_png_sp.replace('[SPECIES]', species))
+            create_folder(os.path.dirname(self.plot_path_nichespace_png_sp.replace('[SPECIES]', species)))
 
-            df_species = feather.read_dataframe(os.path.join(self.plot_path_df_species, f'{species}.feather'))
+            df_species = feather.read_dataframe(self.plot_path_df_species.replace('[SPECIES]', species))
             df_species = pd.concat([df_species, df_grid], axis = 1)
 
             # season
@@ -530,14 +532,18 @@ class PlotUtlis():
             grid_deepsdm_all_month_mean = grid_deepsdm_all_month_sum / grid_deepsdm_all_month_count
             grid_maxent_all_month_mean = grid_maxent_all_month_sum / grid_maxent_all_month_count
 
-            cv2.imwrite(os.path.join(self.plot_path_nichespace_png_sp.replace('[SPECIES]', species), f'{species}_deepsdm_all_month_nichespace_max.png'), png_operation(grid_deepsdm_all_month_max))
-            cv2.imwrite(os.path.join(self.plot_path_nichespace_png_sp.replace('[SPECIES]', species), f'{species}_deepsdm_all_month_nichespace_mean.png'), png_operation(grid_deepsdm_all_month_mean))
-            cv2.imwrite(os.path.join(self.plot_path_nichespace_png_sp.replace('[SPECIES]', species), f'{species}_deepsdm_all_month_nichespace_sum.png'), png_operation(grid_deepsdm_all_month_sum))
-
-            cv2.imwrite(os.path.join(self.plot_path_nichespace_png_sp.replace('[SPECIES]', species), f'{species}_maxent_all_month_nichespace_max.png'), png_operation(grid_maxent_all_month_max))
-            cv2.imwrite(os.path.join(self.plot_path_nichespace_png_sp.replace('[SPECIES]', species), f'{species}_maxent_all_month_nichespace_mean.png'), png_operation(grid_maxent_all_month_mean))
-            cv2.imwrite(os.path.join(self.plot_path_nichespace_png_sp.replace('[SPECIES]', species), f'{species}_maxent_all_month_nichespace_sum.png'), png_operation(grid_maxent_all_month_sum))
-
+            
+            logpng_info = {'deepsdm_all_month_max': grid_deepsdm_all_month_max, 
+                           'deepsdm_all_month_mean': grid_deepsdm_all_month_mean, 
+                           'deepsdm_all_month_sum': grid_deepsdm_all_month_sum, 
+                           'maxent_all_month_max': grid_maxent_all_month_max, 
+                           'maxent_all_month_mean': grid_maxent_all_month_mean,   
+                           'maxent_all_month_sum': grid_maxent_all_month_sum}            
+            for key, data in logpng_info.items():
+                plot_output = self.plot_path_nichespace_png_sp.replace('[SPECIES]', species).replace('[SUFFIX]', key)
+                cv2.imwrite(plot_output, png_operation(data))
+            
+            
 
             logh5_info = {'deepsdm_all_month_max': grid_deepsdm_all_month_max, 
                           'deepsdm_all_month_mean': grid_deepsdm_all_month_mean, 
@@ -546,7 +552,7 @@ class PlotUtlis():
                           'maxent_all_month_mean': grid_maxent_all_month_mean,   
                           'maxent_all_month_sum': grid_maxent_all_month_sum}
             for key, data in logh5_info.items():
-                with h5py.File(os.path.join(self.plot_path_nichespace_h5, f'{species}.h5'), 'a') as hf:
+                with h5py.File(self.plot_path_nichespace_h5.replace('[SPECIES]', species), 'a') as hf:
                     if key in hf:
                         del hf[key]
                     hf.create_dataset(key, data = data)
@@ -573,7 +579,7 @@ class PlotUtlis():
         for species in self.species_list_predict:
             print(f'\r{species}', end = '')
 
-            with h5py.File(os.path.join(self.plot_path_nichespace_h5, f'{species}.h5'), 'r') as hf:
+            with h5py.File(self.plot_path_nichespace_h5.replace('[SPECIES]', species), 'r') as hf:
                 grid_deepsdm_all_month_max = hf['deepsdm_all_month_max'][:]
                 grid_deepsdm_all_month_mean = hf['deepsdm_all_month_mean'][:]
                 grid_deepsdm_all_month_sum = hf['deepsdm_all_month_sum'][:]
@@ -647,7 +653,7 @@ class PlotUtlis():
             unique_species = set(coocc_counts['sp1']).union(set(coocc_counts['sp2']))
 
             for species in unique_species:
-                with h5py.File(os.path.join(self.plot_path_nichespace_h5, f'{species}.h5'), 'r') as hf:
+                with h5py.File(self.plot_path_nichespace_h5.replace('[SPECIES]', species), 'r') as hf:
                     for model, suffix in [('deepsdm', 'max'), ('maxent', 'max')]:
                         rst = hf[f'{model}_all_month_{suffix}'][:]
                         nichespace_cache[(species, model)] = rst[rst > 0]
@@ -749,8 +755,27 @@ class PlotUtlis():
         
         return indicator_merged
         
+    # For Fig5
+    def get_deepsdm_nichespace(self, suffix = 'max'):
+        nichespace_deepsdm_all = []
+        nichespace_deepsdm_all_nonflatten = []
+        for species in self.species_list_predict:
+            h5_path = self.plot_path_nichespace_h5.replace('[SPECIES]', species)
+            with h5py.File(h5_path, 'r') as hf:
+                deepsdm_dataset_name = f'deepsdm_all_month_{suffix}'
+                if deepsdm_dataset_name in hf.keys():
+                    nichespace_deepsdm = hf[deepsdm_dataset_name][:].copy()
+                    nichespace_deepsdm = nichespace_deepsdm/nichespace_deepsdm.sum().sum()
+                    i_nonzeros = np.where(nichespace_deepsdm.flatten() > 0)
+                    nichespace_deepsdm_all.append(nichespace_deepsdm.flatten()[i_nonzeros])
+                    nichespace_deepsdm_all_nonflatten.append(nichespace_deepsdm)
+                else:
+                    print(f'No {sp} in DeepSDM.')
+
+        nichespace_deepsdm_all = np.vstack(nichespace_deepsdm_all)
+        nichespace_deepsdm_all_nonflatten = np.stack(nichespace_deepsdm_all_nonflatten, axis = 0)
         
-        
+        return nichespace_deepsdm_all, nichespace_deepsdm_all_nonflatten
         
         
         
