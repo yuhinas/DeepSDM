@@ -16,6 +16,8 @@ from concurrent.futures import ThreadPoolExecutor
 from scipy.spatial.distance import mahalanobis
 from scipy.stats import spearmanr, ttest_rel
 import glob
+from rasterio.transform import xy
+import statsmodels.api as sm
 
 class PlotUtlis():
     def __init__(self, run_id, exp_id, niche_rst_size):
@@ -100,7 +102,7 @@ class PlotUtlis():
         
         self.x_pca = 1
         self.y_pca = 2
-        
+        self.color_list = ['#4daf4a', '#984ea3', '#ff7f00']
         
         
         
@@ -113,6 +115,7 @@ class PlotUtlis():
         self.plot_path_envcorrelation = os.path.join('plots', run_id, 'FigS3_envcorrelation')
         self.plot_path_nichespace_clustering = os.path.join('plots', run_id, 'Fig5_nichespace_clustering')
         self.plot_path_nichespace_clustering_test = os.path.join('plots', run_id, 'FigS4_nichespace_clustering_test')
+        self.plot_path_cph = os.path.join('plots', run_id, 'Fig6_cph')
         
         
         # 輸出路徑
@@ -130,10 +133,15 @@ class PlotUtlis():
         self.plot_path_nichespace_png_sp = os.path.join(self.plot_path_nichespace, 'png', '[SPECIES]', '[SPECIES]_nichespace_[SUFFIX].png')        
         self.df_grid_path = os.path.join(self.plot_path_nichespace, 'df_grid.feather')
         self.df_spearman_path = os.path.join(self.plot_path_nichespace, 'df_spearman.csv')
+        self.cluster_labels_path = os.path.join(self.plot_path_nichespace_clustering, 'cluster_labels.yaml')
         self.cluster_avg_nichespace_path = os.path.join(self.plot_path_nichespace_clustering, 'cluster_avg_nichespace.yaml')
         self.df_nichespace_center_coordinate_path = os.path.join(self.plot_path_nichespace_clustering, 'nichespecies_center_coordinate.csv')
-        
-        
+        self.df_spearman_ecogeo_path = os.path.join(self.plot_path_cph, 'df_spearman_ecogeo.csv')
+        self.niche_beta_params_path = os.path.join(self.plot_path_cph, 'niche_beta_params.json')
+        self.geographical_beta_params_path = os.path.join(self.plot_path_cph, 'geographical_beta_params.json')
+        self.beta_cluster_result_path = os.path.join(self.plot_path_cph, '[CENTER_TYPE]_cluster_[CLUSTER]_beta_result.txt')
+        self.niche_beta_cluster_params_path = os.path.join(self.plot_path_cph, 'niche_beta_cluster_params.json')
+        self.geographical_beta_cluster_params_path = os.path.join(self.plot_path_cph, 'geographical_beta_cluster_params.json')        
         
         
         
@@ -900,12 +908,339 @@ class PlotUtlis():
             env_value_cluster = np.concatenate(env_value_cluster)
             env_value_cluster_all.append((cluster, env_value_cluster))
         return env_value_cluster_all
+
+    # For Fig6
+    def calculate_cph_spearman_beta(self):
+        # 物種參數字典初始化
+        ecological_fit_info = {}   # 格式：{ species: [slope, intercept, min_distance, max_distance] }
+        geographical_fit_info = {} # 格式：{ species: [slope, intercept, min_distance, max_distance] }
+        df_spearman_ecogeo = pd.DataFrame({'center_type': [], 'species': [], 'rho': [], 'p': []})
+        epsilon = 1e-8
+
+        # 依序處理每一個物種
+        for species in self.species_list_predict:
+            print(f"Processing species: {species}\r", end = '')
+
+            # -------------------------
+            # 2. 讀取 h5 檔並累計所有時間點的結果（地理資料）
+            img_sum = None
+            with h5py.File(self.deepsdm_h5_path.replace('[SPECIES]', species), 'r') as hf:
+                for date in self.date_list_predict:
+                    if img_sum is None:
+                        img_sum = hf[date][:].copy()
+                    else:
+                        img_sum = np.maximum(img_sum, hf[date][:].copy())
+
+            # -------------------------
+            # 3. 使用 rasterio 批量處理將所有像素索引轉換為經緯度
+            x_indices = np.where(self.extent_binary == 1)[1]
+            y_indices = np.where(self.extent_binary == 1)[0]
+            lon_lat_pairs = [xy(self.transform, y, x) for y, x in zip(y_indices, x_indices)]
+            lons, lats = zip(*lon_lat_pairs)
+            lons = np.array(lons)
+            lats = np.array(lats)
+
+            # 計算加權後的地理中心（依據 img_sum 的值加權）
+            valid_mask = ~np.isnan(img_sum)
+            total = img_sum[valid_mask].sum()
+            y_weighted = (np.where(valid_mask)[0] * img_sum[valid_mask]).sum() / total
+            x_weighted = (np.where(valid_mask)[1] * img_sum[valid_mask]).sum() / total
+            lon_center, lat_center = rasterio.transform.xy(self.transform, y_weighted, x_weighted, offset='center')
+
+            # 計算每個像素與地理中心之間的距離
+            distances_all = haversine(lats, lons, lat_center, lon_center)
+            # 將 img_sum 平展後取非 NaN 值
+            cell_values_all = img_sum[valid_mask].flatten()
             
+            rho_geo, p_geo = spearmanr(distances_all, cell_values_all)
+            df_spearman_ecogeo.loc[len(df_spearman_ecogeo)] = ['Geographical_center', species, rho_geo, p_geo]
+            # -------------------------
+            # 4. 計算生態中心（niche space）的資料
+            # 透過預先計算的 nichespace_deepsdm 產生網格坐標
+            with h5py.File(self.plot_path_nichespace_h5.replace('[SPECIES]', species), 'r') as hf:
+                nichespace_deepsdm = hf['deepsdm_all_month_max'][:]
+
+            coordinates_values = {'center_x': [], 'center_y': [], 'value_deepsdm': []}
+            for i in range(self.niche_rst_size):
+                for j in range(self.niche_rst_size):
+                    coordinates_values['center_x'].append(self.nichespace_extent[0] + j * self.nichespace_cell_width + self.nichespace_cell_width / 2)
+                    coordinates_values['center_y'].append(self.nichespace_extent[3] - i * self.nichespace_cell_height - self.nichespace_cell_height / 2)
+                    coordinates_values['value_deepsdm'].append(nichespace_deepsdm[i, j])
+            df_cor = pd.DataFrame(coordinates_values)
+            # 僅保留 value_deepsdm > 0 的資料
+            df_cor = df_cor.query('value_deepsdm > 0').reset_index(drop=True)
+
+            # 為計算 Mahalanobis 距離，我們先計算生態空間中非零值的中心與協方差矩陣
+            df_cor_only = df_cor[['center_x', 'center_y']]
+            cov_matrix = np.cov(df_cor_only, rowvar=False)
+            inv_cov_matrix = np.linalg.inv(cov_matrix)
+            # 加權計算生態空間中心（依據 value_deepsdm 的值）
+            center_x = np.average(df_cor['center_x'], weights=df_cor['value_deepsdm'])
+            center_y = np.average(df_cor['center_y'], weights=df_cor['value_deepsdm'])
+            center = np.array([center_x, center_y])
+            # 計算 Mahalanobis 距離，並存入新欄位
+            df_cor['distance_mah'] = df_cor_only.apply(lambda row: mahalanobis(row, center, inv_cov_matrix), axis=1)
+
+            # 定義條件（實際上 df_cor 的 value_deepsdm 已皆大於 0）
+            condition_deepsdm = df_cor['value_deepsdm'] > 0
+            
+            rho_eco, p_eco = spearmanr(df_cor['distance_mah'][condition_deepsdm], df_cor['value_deepsdm'][condition_deepsdm])
+            df_spearman_ecogeo.loc[len(df_spearman_ecogeo)] = ['Niche_center', species, rho_eco, p_eco]
+            # -------------------------
+            # **生態中心的 Beta 回歸**
+            # 第 5 步：Beta regression (生態中心)
+            x_eco = df_cor['distance_mah'].values
+            y_eco = df_cor['value_deepsdm'].values
+
+            # 正規化到 (0,1) 避免 0、1
+            y_eco_normalize = (y_eco - np.min(y_eco)) / (np.max(y_eco) - np.min(y_eco)) \
+                              * (1 - 2 * epsilon) + epsilon
+
+            X_eco = sm.add_constant(x_eco)  # shape=(n,2)，第一欄截距
+            model_eco = Beta(endog=y_eco_normalize,
+                             exog=X_eco,
+                             Z=None,                 # phi 沒有額外解釋變數
+                             link=Logit(),           # \mu 的連結 (logit)
+                             link_phi=sm.families.links.Log())  # phi 的連結 (log)
+            result_eco = model_eco.fit(disp=False)
+
+            # 假設 Z=None → 參數通常有 3 個: [intercept_mu, slope_mu, intercept_phi]
+            # （如果 Beta 類別實作相同於先前提供的範例）
+            params_eco = result_eco.params
+            intercept_mu_eco = params_eco[0]   # \(\beta_0\)
+            slope_mu_eco     = params_eco[1]   # \(\beta_1\)
+            intercept_phi_eco = params_eco[2]  # phi 參數 (常數)
+
+            # 另外紀錄 x, y 的 min/max，之後重畫時才知道如何逆規模化
+            x_min_eco = float(np.min(x_eco))
+            x_max_eco = float(np.max(x_eco))
+            y_min_eco = float(np.min(y_eco))   # 原始 y 的 min
+            y_max_eco = float(np.max(y_eco))   # 原始 y 的 max
+
+            # 將本物種的參數存入 dictionary
+            ecological_fit_info[species] = {
+                "mu_link":    "logit",
+                "phi_link":   "log",
+                "params_mu":  [float(intercept_mu_eco), float(slope_mu_eco)],
+                "params_phi": [float(intercept_phi_eco)],
+                "x_min":      x_min_eco,
+                "x_max":      x_max_eco,
+                "y_min":      y_min_eco,
+                "y_max":      y_max_eco,
+                "epsilon":    epsilon  # 將用於日後反向還原
+            }
+
+            # -------------------------
+            # 第 6 步：Beta regression (地理中心)
+            x_geo = distances_all
+            y_geo = cell_values_all
+
+            y_geo_normalize = (y_geo - np.min(y_geo)) / (np.max(y_geo) - np.min(y_geo)) \
+                              * (1 - 2 * epsilon) + epsilon
+
+            X_geo = sm.add_constant(x_geo)
+            model_geo = Beta(endog=y_geo_normalize,
+                             exog=X_geo,
+                             Z=None,
+                             link=Logit(),
+                             link_phi=sm.families.links.Log())
+            result_geo = model_geo.fit(disp=False)
+
+            params_geo = result_geo.params
+            intercept_mu_geo = params_geo[0]
+            slope_mu_geo     = params_geo[1]
+            intercept_phi_geo = params_geo[2]
+
+            x_min_geo = float(np.min(x_geo))
+            x_max_geo = float(np.max(x_geo))
+            y_min_geo = float(np.min(y_geo))
+            y_max_geo = float(np.max(y_geo))
+
+            geographical_fit_info[species] = {
+                "mu_link":    "logit",
+                "phi_link":   "log",
+                "params_mu":  [float(intercept_mu_geo), float(slope_mu_geo)],
+                "params_phi": [float(intercept_phi_geo)],
+                "x_min":      x_min_geo,
+                "x_max":      x_max_geo,
+                "y_min":      y_min_geo,
+                "y_max":      y_max_geo,
+                "epsilon":    epsilon
+            }
+        return df_spearman_ecogeo, ecological_fit_info, geographical_fit_info
         
-        
-        
-        
-        
+    # For Fig6
+    def calculate_cph_spearman_beta_cluster(self, n_cluster=3):
+        ecological_fit_info = {}   # { species: [slope, intercept, min_distance, max_distance] }
+        geographical_fit_info = {} # { species: [slope, intercept, min_distance, max_distance] }
+        epsilon = 1e-8
+
+        for cluster in range(1, n_cluster+1):
+            species_list_cluster = np.array(self.species_list_predict)[np.array(self.cluster_labels) == cluster]
+            # 依序處理每一個物種
+            df_cluster = []
+            distances_all_cluster = []
+            cell_values_all_cluster = []
+            for species in species_list_cluster:
+                print(f"Processing species: {species}\r", end = '')
+
+                # -------------------------
+                # 2. 讀取 h5 檔並累計所有時間點的結果（地理資料）
+                img_sum = None
+                with h5py.File(self.deepsdm_h5_path.replace('[SPECIES]', species), 'r') as hf:
+                    for date in self.date_list_predict:
+                        if img_sum is None:
+                            img_sum = hf[date][:].copy()
+                        else:
+                            img_sum = np.maximum(img_sum, hf[date][:].copy())
+
+                # -------------------------
+                # 3. 使用 rasterio 批量處理將所有像素索引轉換為經緯度
+                x_indices = np.where(self.extent_binary == 1)[1]
+                y_indices = np.where(self.extent_binary == 1)[0]
+                lon_lat_pairs = [xy(self.transform, y, x) for y, x in zip(y_indices, x_indices)]
+                lons, lats = zip(*lon_lat_pairs)
+                lons = np.array(lons)
+                lats = np.array(lats)
+
+                # 計算加權後的地理中心（依據 img_sum 的值加權）
+                valid_mask = ~np.isnan(img_sum)
+                total = img_sum[valid_mask].sum()
+                y_weighted = (np.where(valid_mask)[0] * img_sum[valid_mask]).sum() / total
+                x_weighted = (np.where(valid_mask)[1] * img_sum[valid_mask]).sum() / total
+                lon_center, lat_center = rasterio.transform.xy(self.transform, y_weighted, x_weighted, offset='center')
+
+                # 計算每個像素與地理中心之間的距離
+                distances_all = haversine(lats, lons, lat_center, lon_center)
+                # 將 img_sum 平展後取非 NaN 值
+                cell_values_all = img_sum[valid_mask].flatten()
+
+                distances_all_cluster.append(distances_all)
+                cell_values_all_cluster.append(cell_values_all)
+
+
+                # -------------------------
+                # 4. 計算生態中心（niche space）的資料
+                # 透過預先計算的 nichespace_deepsdm 產生網格坐標
+                with h5py.File(self.plot_path_nichespace_h5.replace('[SPECIES]', species), 'r') as hf:
+                    nichespace_deepsdm = hf['deepsdm_all_month_max'][:]
+
+                coordinates_values = {'center_x': [], 'center_y': [], 'value_deepsdm': []}
+                for i in range(self.niche_rst_size):
+                    for j in range(self.niche_rst_size):
+                        coordinates_values['center_x'].append(self.nichespace_extent[0] + j * self.nichespace_cell_width + self.nichespace_cell_width / 2)
+                        coordinates_values['center_y'].append(self.nichespace_extent[3] - i * self.nichespace_cell_height - self.nichespace_cell_height / 2)
+                        coordinates_values['value_deepsdm'].append(nichespace_deepsdm[i, j])
+                df_cor = pd.DataFrame(coordinates_values)
+                # 僅保留 value_deepsdm > 0 的資料
+                df_cor = df_cor.query('value_deepsdm > 0').reset_index(drop=True)
+
+                # 為計算 Mahalanobis 距離，我們先計算生態空間中非零值的中心與協方差矩陣
+                df_cor_only = df_cor[['center_x', 'center_y']]
+                cov_matrix = np.cov(df_cor_only, rowvar=False)
+                inv_cov_matrix = np.linalg.inv(cov_matrix)
+                # 加權計算生態空間中心（依據 value_deepsdm 的值）
+                center_x = np.average(df_cor['center_x'], weights=df_cor['value_deepsdm'])
+                center_y = np.average(df_cor['center_y'], weights=df_cor['value_deepsdm'])
+                center = np.array([center_x, center_y])
+                # 計算 Mahalanobis 距離，並存入新欄位
+                df_cor['distance_mah'] = df_cor_only.apply(lambda row: mahalanobis(row, center, inv_cov_matrix), axis=1)
+
+                df_cluster.append(df_cor)
+
+            df_cluster_cor = pd.concat(df_cluster)
+            distances_all_cluster = np.concatenate(distances_all_cluster)
+            cell_values_all_cluster = np.concatenate(cell_values_all_cluster)
+
+            # -------------------------
+            # **生態中心的 Beta 回歸**
+            # 第 5 步：Beta regression (生態中心)
+            x_eco = df_cluster_cor['distance_mah'].values
+            y_eco = df_cluster_cor['value_deepsdm'].values
+
+            # 正規化到 (0,1) 避免 0、1
+            y_eco_normalize = (y_eco - np.min(y_eco)) / (np.max(y_eco) - np.min(y_eco)) \
+                              * (1 - 2 * epsilon) + epsilon
+
+            X_eco = sm.add_constant(x_eco)  # shape=(n,2)，第一欄截距
+            model_eco = Beta(endog=y_eco_normalize,
+                             exog=X_eco,
+                             Z=None,                 # phi 沒有額外解釋變數
+                             link=Logit(),           # \mu 的連結 (logit)
+                             link_phi=sm.families.links.Log())  # phi 的連結 (log)
+            result_eco = model_eco.fit(disp=False)
+
+            # 假設 Z=None → 參數通常有 3 個: [intercept_mu, slope_mu, intercept_phi]
+            # （如果 Beta 類別實作相同於先前提供的範例）
+            params_eco = result_eco.params
+            intercept_mu_eco = params_eco[0]   # \(\beta_0\)
+            slope_mu_eco     = params_eco[1]   # \(\beta_1\)
+            intercept_phi_eco = params_eco[2]  # phi 參數 (常數)
+
+            # 另外紀錄 x, y 的 min/max，之後重畫時才知道如何逆規模化
+            x_min_eco = float(np.min(x_eco))
+            x_max_eco = float(np.max(x_eco))
+            y_min_eco = float(np.min(y_eco))   # 原始 y 的 min
+            y_max_eco = float(np.max(y_eco))   # 原始 y 的 max
+
+            # 將本物種的參數存入 dictionary
+            ecological_fit_info[cluster] = {
+                "mu_link":    "logit",
+                "phi_link":   "log",
+                "params_mu":  [float(intercept_mu_eco), float(slope_mu_eco)],
+                "params_phi": [float(intercept_phi_eco)],
+                "x_min":      x_min_eco,
+                "x_max":      x_max_eco,
+                "y_min":      y_min_eco,
+                "y_max":      y_max_eco,
+                "epsilon":    epsilon  # 將用於日後反向還原
+            }
+
+            with open(self.beta_cluster_result_path.replace('[CENTER_TYPE]', 'Niche_center').replace('[CLUSTER]', str(cluster)), 'w') as file:
+                file.write(result_eco.summary().as_text())
+
+            # -------------------------
+            # 第 6 步：Beta regression (地理中心)
+            x_geo = distances_all_cluster
+            y_geo = cell_values_all_cluster
+
+            y_geo_normalize = (y_geo - np.min(y_geo)) / (np.max(y_geo) - np.min(y_geo)) \
+                              * (1 - 2 * epsilon) + epsilon
+
+            X_geo = sm.add_constant(x_geo)
+            model_geo = Beta(endog=y_geo_normalize,
+                             exog=X_geo,
+                             Z=None,
+                             link=Logit(),
+                             link_phi=sm.families.links.Log())
+            result_geo = model_geo.fit(disp=False)
+
+            params_geo = result_geo.params
+            intercept_mu_geo = params_geo[0]
+            slope_mu_geo     = params_geo[1]
+            intercept_phi_geo = params_geo[2]
+
+            x_min_geo = float(np.min(x_geo))
+            x_max_geo = float(np.max(x_geo))
+            y_min_geo = float(np.min(y_geo))
+            y_max_geo = float(np.max(y_geo))
+
+            geographical_fit_info[cluster] = {
+                "mu_link":    "logit",
+                "phi_link":   "log",
+                "params_mu":  [float(intercept_mu_geo), float(slope_mu_geo)],
+                "params_phi": [float(intercept_phi_geo)],
+                "x_min":      x_min_geo,
+                "x_max":      x_max_geo,
+                "y_min":      y_min_geo,
+                "y_max":      y_max_geo,
+                "epsilon":    epsilon
+            }
+
+            with open(self.beta_cluster_result_path.replace('[CENTER_TYPE]', 'Geographical_center').replace('[CLUSTER]', str(cluster)), 'w') as file:
+                file.write(result_geo.summary().as_text())
+                
+        return ecological_fit_info, geographical_fit_info
         
         
         
@@ -1018,7 +1353,9 @@ class PlotUtlis():
         self.df_grid = None
         self.df_spearman = None
         self.cluster_avg_nichespace = None
-
+        self.cluster_labels = None
+        self.df_spearman_ecogeo = None
+        
         # 逐一檢查檔案是否存在並讀取
         if os.path.exists(self.avg_elev_path):
             self.avg_elev = pd.read_csv(self.avg_elev_path)
@@ -1057,6 +1394,29 @@ class PlotUtlis():
         if os.path.exists(self.env_pca_loadings_path):
             self.env_pca_loadings = pd.read_csv(self.env_pca_loadings_path, index_col = 0)
         
+        if os.path.exists(self.cluster_labels_path):
+            with open(self.cluster_labels_path, 'r') as f:
+                self.cluster_labels = yaml.load(f, Loader = yaml.FullLoader)
+        
+        if os.path.exists(self.df_spearman_ecogeo_path):
+            self.df_spearman_ecogeo = pd.read_csv(self.df_spearman_ecogeo_path)
+                    
+        if os.path.exists(self.niche_beta_params_path):
+            with open(self.niche_beta_params_path, 'r') as f:
+                self.niche_beta_params = json.load(f)
+                
+        if os.path.exists(self.geographical_beta_params_path):
+            with open(self.geographical_beta_params_path, 'r') as f:
+                self.geographical_beta_params = json.load(f)
+        
+        if os.path.exists(self.niche_beta_cluster_params_path):
+            with open(self.niche_beta_cluster_params_path, 'r') as f:
+                self.niche_beta_cluster_params = json.load(f)
+                
+        if os.path.exists(self.geographical_beta_cluster_params_path):
+            with open(self.geographical_beta_cluster_params_path, 'r') as f:
+                self.geographical_beta_cluster_params = json.load(f)
+
         
 def create_folder(file_path):
     if not os.path.exists(file_path):
@@ -1258,3 +1618,184 @@ def get_performance_stats(indicator_merged):
         p_values.append(p_value)
         
     return data_deepsdm, data_maxent, ticks, significance_stars, n, t_stats, p_values
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# -*- coding: utf-8 -*-
+
+u"""
+Beta regression for modeling rates and proportions.
+References
+----------
+Grün, Bettina, Ioannis Kosmidis, and Achim Zeileis. Extended beta regression
+in R: Shaken, stirred, mixed, and partitioned. No. 2011-22. Working Papers in
+Economics and Statistics, 2011.
+Smithson, Michael, and Jay Verkuilen. "A better lemon squeezer?
+Maximum-likelihood regression with beta-distributed dependent variables."
+Psychological methods 11.1 (2006): 54.
+"""
+import numpy as np
+import pandas as pd
+import statsmodels.api as sm
+from scipy.special import gammaln as lgamma
+from statsmodels.base.model import GenericLikelihoodModel
+from statsmodels.genmod.families import Binomial
+
+# this is only need while #2024 is open.
+class Logit(sm.families.links.Logit):
+
+    """Logit tranform that won't overflow with large numbers."""
+
+    def inverse(self, z):
+        return 1 / (1. + np.exp(-z))
+
+_init_example = """
+    Beta regression with default of logit-link for exog and log-link
+    for precision.
+    >>> mod = Beta(endog, exog)
+    >>> rslt = mod.fit()
+    >>> print rslt.summary()
+    We can also specify a formula and a specific structure and use the
+    identity-link for phi.
+    >>> from sm.families.links import identity
+    >>> Z = patsy.dmatrix('~ temp', dat, return_type='dataframe')
+    >>> mod = Beta.from_formula('iyield ~ C(batch, Treatment(10)) + temp',
+    ...                         dat, Z=Z, link_phi=identity())
+    In the case of proportion-data, we may think that the precision depends on
+    the number of measurements. E.g for sequence data, on the number of
+    sequence reads covering a site:
+    >>> Z = patsy.dmatrix('~ coverage', df)
+    >>> mod = Beta.from_formula('methylation ~ disease + age + gender + coverage', df, Z)
+    >>> rslt = mod.fit()
+"""
+
+class Beta(GenericLikelihoodModel):
+
+    """Beta Regression.
+    This implementation uses `phi` as a precision parameter equal to
+    `a + b` from the Beta parameters.
+    """
+
+    def __init__(self, endog, exog, Z=None, link=Logit(),
+            link_phi=sm.families.links.Log(), **kwds):
+        """
+        Parameters
+        ----------
+        endog : array-like
+            1d array of endogenous values (i.e. responses, outcomes,
+            dependent variables, or 'Y' values).
+        exog : array-like
+            2d array of exogeneous values (i.e. covariates, predictors,
+            independent variables, regressors, or 'X' values). A nobs x k
+            array where `nobs` is the number of observations and `k` is
+            the number of regressors. An intercept is not included by
+            default and should be added by the user. See
+            `statsmodels.tools.add_constant`.
+        Z : array-like
+            2d array of variables for the precision phi.
+        link : link
+            Any link in sm.families.links for `exog`
+        link_phi : link
+            Any link in sm.families.links for `Z`
+        Examples
+        --------
+        {example}
+        See Also
+        --------
+        :ref:`links`
+        """.format(example=_init_example)
+        assert np.all((0 < endog) & (endog < 1))
+        if Z is None:
+            extra_names = ['phi']
+            Z = np.ones((len(endog), 1), dtype='f')
+        else:
+            extra_names = ['precision-%s' % zc for zc in \
+                        (Z.columns if hasattr(Z, 'columns') else range(1, Z.shape[1] + 1))]
+        kwds['extra_params_names'] = extra_names
+
+        super(Beta, self).__init__(endog, exog, **kwds)
+        self.link = link
+        self.link_phi = link_phi
+        
+        self.Z = Z
+        assert len(self.Z) == len(self.endog)
+
+    def nloglikeobs(self, params):
+        """
+        Negative log-likelihood.
+        Parameters
+        ----------
+        params : np.ndarray
+            Parameter estimates
+        """
+        return -self._ll_br(self.endog, self.exog, self.Z, params)
+
+    def fit(self, start_params=None, maxiter=100000, disp=False,
+            method='bfgs', **kwds):
+        """
+        Fit the model.
+        Parameters
+        ----------
+        start_params : array-like
+            A vector of starting values for the regression
+            coefficients.  If None, a default is chosen.
+        maxiter : integer
+            The maximum number of iterations
+        disp : bool
+            Show convergence stats.
+        method : str
+            The optimization method to use.
+        """
+
+        if start_params is None:
+            start_params = sm.GLM(self.endog, self.exog, family=Binomial()
+                                 ).fit(disp=False).params
+            start_params = np.append(start_params, [0.5] * self.Z.shape[1])
+
+        return super(Beta, self).fit(start_params=start_params,
+                                        maxiter=maxiter,
+                                        method=method, disp=disp, **kwds)
+
+    def _ll_br(self, y, X, Z, params):
+        nz = self.Z.shape[1]
+
+        Xparams = params[:-nz]
+        Zparams = params[-nz:]
+
+        mu = self.link.inverse(np.dot(X, Xparams))
+        phi = self.link_phi.inverse(np.dot(Z, Zparams))
+        # TODO: derive a and b and constrain to > 0?
+
+        if np.any(phi <= np.finfo(float).eps): return np.array(-np.inf)
+
+        ll = lgamma(phi) - lgamma(mu * phi) - lgamma((1 - mu) * phi) \
+                + (mu * phi - 1) * np.log(y) + (((1 - mu) * phi) - 1) \
+                * np.log(1 - y)
+
+        return ll
+
+def logistic(z):
+    return 1 / (1 + np.exp(-z))
