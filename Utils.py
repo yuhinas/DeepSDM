@@ -4,9 +4,7 @@ import rasterio
 import json
 import pandas as pd
 from types import SimpleNamespace
-from sklearn.covariance import EllipticEnvelope
 import numpy as np
-from matplotlib.patches import Ellipse
 import cv2
 import matplotlib as mpl
 from joblib import Parallel, delayed
@@ -18,6 +16,8 @@ from scipy.stats import spearmanr, ttest_rel
 import glob
 from rasterio.transform import xy
 import statsmodels.api as sm
+import matplotlib.pyplot as plt
+from matplotlib.ticker import MaxNLocator
 
 class PlotUtlis():
     def __init__(self, run_id, exp_id, niche_rst_size):
@@ -116,6 +116,7 @@ class PlotUtlis():
         self.plot_path_nichespace_clustering = os.path.join('plots', run_id, 'Fig5_nichespace_clustering')
         self.plot_path_nichespace_clustering_test = os.path.join('plots', run_id, 'FigS4_nichespace_clustering_test')
         self.plot_path_cph = os.path.join('plots', run_id, 'Fig6_cph')
+        self.plot_path_cph_subplots = os.path.join(self.plot_path_cph, 'subplots')
         
         
         # 輸出路徑
@@ -1243,7 +1244,188 @@ class PlotUtlis():
         return ecological_fit_info, geographical_fit_info
         
         
+    # For Fig6
+    def plot_subplots(self, species_to_print):
         
+        [create_folder(os.path.join(self.plot_path_cph_subplots, f'Fig6_subplots_{i+1}')) for i in range(4)]
+        # 創建所有像素的網格坐標 (僅執行一次)
+        x_indices = np.where(self.extent_binary == 1)[1]
+        y_indices = np.where(self.extent_binary == 1)[0]
+
+        # 使用 rasterio 的批量處理一次性將像素索引轉換為經緯度
+        lon_lat_pairs = [xy(self.transform, y, x) for y, x in zip(y_indices, x_indices)]
+        lons, lats = zip(*lon_lat_pairs)
+        lons = np.array(lons)
+        lats = np.array(lats)
+
+        for species in species_to_print:
+
+            img_sum = None
+
+            with h5py.File(self.deepsdm_h5_path.replace('[SPECIES]', species), 'r') as hf:
+                for date in self.date_list_predict:
+                    if img_sum is None:
+                        img_sum = hf[date][:].copy()
+                    else:
+                        img_sum = np.maximum(img_sum, hf[date][:].copy())
+
+            # 計算每個像素與地理重心之間的距離，使用批量化的 numpy 操作
+            lon_center, lat_center = rasterio.transform.xy(self.transform, 
+                                                           (np.where(~np.isnan(img_sum))[0] * img_sum[~np.isnan(img_sum)]).sum() / img_sum[~np.isnan(img_sum)].sum(), 
+                                                           (np.where(~np.isnan(img_sum))[1] * img_sum[~np.isnan(img_sum)]).sum() / img_sum[~np.isnan(img_sum)].sum(), 
+                                                           offset='center')    
+            distances_all = haversine(lats, lons, lat_center, lon_center)
+
+            # 平展 img_sum 以與 distances_all 一一對應
+            cell_values_all = img_sum[~np.isnan(img_sum)].flatten()
+
+            df_species = feather.read_dataframe(self.plot_path_df_species.replace('[SPECIES]', species))
+            df_species = pd.concat([df_species, self.df_grid], axis = 1)
+
+            with h5py.File(self.plot_path_nichespace_h5.replace('[SPECIES]', species), 'r') as hf:
+                nichespace_deepsdm = hf['deepsdm_all_month_max'][:]
+
+            # calculate the negative regression of every cell of 2d-niche space to the niche center
+            # 遍历每个单元格以计算中心点坐标
+            coordinates_values = {'center_x': [], 'center_y': [], 'value_deepsdm': []}
+            for i in range(self.niche_rst_size):
+                for j in range(self.niche_rst_size):
+                    coordinates_values['center_x'].append(self.nichespace_extent[0] + j * self.nichespace_cell_width + self.nichespace_cell_width / 2)  #center_x
+                    coordinates_values['center_y'].append(self.nichespace_extent[3] - i * self.nichespace_cell_height - self.nichespace_cell_height / 2) # center_y
+                    coordinates_values['value_deepsdm'].append(nichespace_deepsdm[i, j])  # value_deepsdm
+
+            df_cor = pd.DataFrame(coordinates_values).query('value_deepsdm > 0').reset_index(drop = True)    
+            df_cor_only = df_cor.loc[df_cor['value_deepsdm'] > 0, ['center_x', 'center_y']].reset_index(drop = True)
+
+            # 假設這是整個數據集的協方差矩陣
+            cov_matrix = np.cov(df_cor_only, rowvar=False)
+
+            # 計算協方差矩陣的逆矩陣
+            inv_cov_matrix = np.linalg.inv(cov_matrix)
+
+            # 計算加權的中心
+            center_x = np.multiply(np.array(coordinates_values['center_x']), np.array(coordinates_values['value_deepsdm'])).sum() / np.array(coordinates_values['value_deepsdm']).sum()
+            center_y = np.multiply(np.array(coordinates_values['center_y']), np.array(coordinates_values['value_deepsdm'])).sum() / np.array(coordinates_values['value_deepsdm']).sum()
+            center = np.array([center_x, center_y])
+
+            # 計算 Mahalanobis 距離
+            df_cor['distance_mah'] = df_cor_only.apply(lambda row: mahalanobis(row, center, inv_cov_matrix), axis=1)    
+            condition_deepsdm = df_cor['value_deepsdm'] > 0
+
+            # Fig1
+            fig, ax = plt.subplots(figsize = mm2inch(40, 50), gridspec_kw = {'left': 0.25, 'right': 0.95, 'bottom': 0.12, 'top': 1-0.05/1.25})
+            ax_imshow = ax.imshow(nichespace_deepsdm, cmap = 'coolwarm', extent = self.nichespace_extent)
+            ax.spines['right'].set_visible(False)
+            ax.spines['top'].set_visible(False)
+            ax.spines['left'].set_visible(False)
+            ax.spines['bottom'].set_visible(False)
+            ax.set_ylabel('PC2')
+            ax.set_xlabel('PC1')
+            ax.set_xticks([-4, -2, 0, 2, 4])
+
+            ax_pos = ax.get_position()
+            cbar_ax = fig.add_axes([ax_pos.x0, 
+                                    ax_pos.y0 - ax_pos.height*0.38, 
+                                    ax_pos.width*1, 
+                                    ax_pos.height*0.04])
+            cbar = fig.colorbar(ax_imshow, ax = ax, orientation='horizontal', cax = cbar_ax)
+            ax.scatter(center[0], center[1], c = 'black', s = 15, marker = 'x', linewidths=0.8)
+            
+            plot_output = os.path.join(self.plot_path_cph_subplots, 'Fig6_subplots_1', f'Fig6_subplots_1_{species}.pdf')
+            plt.savefig(plot_output, dpi = 500, transparent = True)
+            plt.show()
+
+
+            # Fig 2
+            fig, ax = plt.subplots(figsize = mm2inch(40, 50), gridspec_kw = {'left': 0.25, 'right': 0.95, 'bottom': 0.96-28/1.0921832795998423/50, 'top': 0.96})
+            ax_imshow = ax.imshow(img_sum, cmap='coolwarm', extent = self.extent_binary_extent, vmin = 0)
+            ax.set_ylabel('Latitude (N)', size = 6.5)
+            ax.set_xlabel('Longitude (E)', size = 6.5)
+            ax.set_xticks([120, 121, 122])
+            ax.scatter(lon_center, lat_center, c = 'black', s = 15, marker = 'x', linewidths = 0.8)
+            ax_pos = ax.get_position()
+            cbar_ax = fig.add_axes([ax_pos.x0, 
+                                    ax_pos.y0 - ax_pos.height*0.38, 
+                                    ax_pos.width*1, 
+                                    ax_pos.height*0.04])
+            cbar = fig.colorbar(ax_imshow, ax=ax, orientation='horizontal', cax=cbar_ax)
+            vmin, vmax = cbar.vmin, cbar.vmax
+            # 使用 numpy 來創建從 vmin 到 vmax，間隔為 0.2 的刻度
+            ticks = np.arange(np.floor(vmin/0.2)*0.2, np.floor(vmax/0.2)*0.2 + 0.2, 0.2)
+            cbar.set_ticks(ticks)    
+            ax.yaxis.set_major_locator(MaxNLocator(integer=True))  # Y 軸只顯示整數
+
+            plot_output = os.path.join(self.plot_path_cph_subplots, 'Fig6_subplots_2', f'Fig6_subplots_2_{species}.pdf')
+            plt.savefig(plot_output, dpi = 500, transparent = True)
+            plt.show()
+
+
+
+            # Fig 3
+            fig, ax = plt.subplots(figsize = mm2inch(40, 40), gridspec_kw = {'left': 0.25, 'right': 0.95, 'bottom': 0.15, 'top': 0.95})
+            ax.scatter(df_cor['distance_mah'][condition_deepsdm], df_cor['value_deepsdm'][condition_deepsdm], alpha = 0.2, color = 'grey', s = 0.1)
+            ax.set_ylabel('Suitablity')
+            ax.set_xlabel('Distance')
+            ax.set_ylim(bottom=0)
+
+            info = self.niche_beta_params[species]
+            params_mu = np.array(info["params_mu"])
+            x_min = info["x_min"]
+            x_max = info["x_max"]
+            y_min = info["y_min"]
+            y_max = info["y_max"]
+            eps   = info["epsilon"]
+
+            x_line = np.linspace(x_min, x_max, 100)
+            X_line = np.column_stack([np.ones_like(x_line), x_line])
+            linear_pred = X_line @ params_mu
+            mu_pred_norm = logistic(linear_pred)
+            mu_pred = ((mu_pred_norm - eps) / (1 - 2*eps)) * (y_max - y_min) + y_min
+
+            cluster_idx = self.cluster_labels[self.species_list_predict.index(species)]  # 1,2,3
+            c_idx = cluster_idx - 1
+            ax.plot(x_line, mu_pred, color = self.color_list[c_idx], linewidth = 1)
+
+#             ax.set_box_aspect(1/abs((extent[1] - extent[0]) / (extent[3] - extent[2])))
+            ax.set_box_aspect(self.nichespace_cell_height / self.nichespace_cell_width)
+            plot_output = os.path.join(self.plot_path_cph_subplots, 'Fig6_subplots_3', f'Fig6_subplots_3_{species}.pdf')
+            plt.savefig(plot_output, dpi = 500, transparent = True)
+            plot_output = os.path.join(self.plot_path_cph_subplots, 'Fig6_subplots_3', f'Fig6_subplots_3_{species}.png')
+            plt.savefig(plot_output, dpi = 2000, transparent = True)
+            plt.show()
+
+
+            # Fig 4
+            fig, ax = plt.subplots(figsize = mm2inch(40, 40), gridspec_kw = {'left': 0.25, 'right': 0.95, 'bottom': 0.15, 'top': 0.95})
+            ax.scatter(distances_all, cell_values_all, alpha = 0.1, color = 'grey', s = 0.1)
+            ax.set_ylabel('Suitablity')
+            ax.set_xlabel('Distance (km)')
+            ax.set_ylim(bottom=0)
+
+            info = self.geographical_beta_params[species]
+            params_mu = np.array(info["params_mu"])
+            x_min = info["x_min"]
+            x_max = info["x_max"]
+            y_min = info["y_min"]
+            y_max = info["y_max"]
+            eps   = info["epsilon"]
+
+            x_line = np.linspace(x_min, x_max, 100)
+            X_line = np.column_stack([np.ones_like(x_line), x_line])
+            linear_pred = X_line @ params_mu
+            mu_pred_norm = logistic(linear_pred)
+            mu_pred = ((mu_pred_norm - eps) / (1 - 2*eps)) * (y_max - y_min) + y_min
+
+            cluster_idx = self.cluster_labels[self.species_list_predict.index(species)]  # 1,2,3
+            c_idx = cluster_idx - 1
+            ax.plot(x_line, mu_pred, color = self.color_list[c_idx], linewidth=1)
+
+            ax.set_box_aspect(self.nichespace_cell_height / self.nichespace_cell_width)
+            plot_output = os.path.join(self.plot_path_cph_subplots, 'Fig6_subplots_4', f'Fig6_subplots_4_{species}.pdf')
+            plt.savefig(plot_output, dpi = 500, transparent = True)
+            plot_output = os.path.join(self.plot_path_cph_subplots, 'Fig6_subplots_4', f'Fig6_subplots_4_{species}.png')
+            plt.savefig(plot_output, dpi = 2000, transparent = True)
+            plt.show()
         
       
     
@@ -1383,7 +1565,10 @@ class PlotUtlis():
                                       self.extent_info[f'PC{self.y_pca:02d}_extent_max']]
             self.nichespace_cell_width = (self.nichespace_extent[1] - self.nichespace_extent[0]) / self.niche_rst_size
             self.nichespace_cell_height = (self.nichespace_extent[3] - self.nichespace_extent[2]) / self.niche_rst_size
-
+        
+        if os.path.exists(self.df_grid_path):
+            self.df_grid = feather.read_dataframe(self.df_grid_path)
+        
         if os.path.exists(self.df_spearman_path):
             self.df_spearman = pd.read_csv(self.df_spearman_path)
 
@@ -1421,36 +1606,6 @@ class PlotUtlis():
 def create_folder(file_path):
     if not os.path.exists(file_path):
         os.makedirs(file_path)
-        
-def cov_center(data, level=0.95):
-    env = EllipticEnvelope(support_fraction=level).fit(data)
-    center = env.location_
-    covariance = env.covariance_
-    return center, covariance
-
-def plot_ellipse(center, covariance, ax, n_std=2.0, facecolor='none', **kwargs):
-    """
-    在给定的轴上绘制一个椭圆。
-
-    :param center: 椭圆的中心点。
-    :param covariance: 椭圆的协方差矩阵。
-    :param ax: matplotlib 轴对象。
-    :param n_std: 确定椭圆大小的标准差倍数。
-    :param facecolor: 椭圆的填充颜色。
-    :param kwargs: 传递给 Ellipse 对象的其他参数。
-    """
-    # 计算协方差矩阵的特征值和特征向量
-    eigenvals, eigenvecs = np.linalg.eigh(covariance)
-    order = eigenvals.argsort()[::-1]
-    eigenvals, eigenvecs = eigenvals[order], eigenvecs[:, order]
-
-    # 计算椭圆的宽度和高度
-    width, height = 2 * n_std * np.sqrt(eigenvals)
-    angle = np.degrees(np.arctan2(*eigenvecs[:,0][::-1]))
-
-    # 创建并添加椭圆形状
-    ellipse = Ellipse(xy=center, width=width, height=height, angle=angle, facecolor=facecolor, **kwargs)
-    ax.add_patch(ellipse)
     
 def png_operation(rst):
     grid_normalized = cv2.normalize(rst, None, 0, 255, cv2.NORM_MINMAX)
