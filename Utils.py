@@ -108,16 +108,13 @@ class PlotUtlis():
         
         # 子資料夾路徑
         self.plot_path_embedding_dimension_reduction = os.path.join('plots', run_id, 'Fig2_embedding_dimension_reduction')
-        self.plot_path_embedding_correlation = os.path.join('plots', run_id, 'Fig2_embedding_correlation')        
+        self.plot_path_embedding_correlation = os.path.join('plots', run_id, 'Fig2_embedding_correlation')
         self.plot_path_attention = os.path.join('plots', run_id, 'Fig3_attention')
-        self.plot_path_attentionstats = os.path.join('plots', run_id, 'FigS2_attentionstats')
         self.plot_path_nichespace = os.path.join('plots', run_id, 'Fig4_nichespace')
-        self.plot_path_envcorrelation = os.path.join('plots', run_id, 'FigS3_envcorrelation')
         self.plot_path_nichespace_clustering = os.path.join('plots', run_id, 'Fig5_nichespace_clustering')
-        self.plot_path_nichespace_clustering_test = os.path.join('plots', run_id, 'FigS4_nichespace_clustering_test')
         self.plot_path_cph = os.path.join('plots', run_id, 'Fig6_cph')
         self.plot_path_cph_subplots = os.path.join(self.plot_path_cph, 'subplots')
-        
+        self.plot_path_suppl = os.path.join('plots', run_id, 'FigSuppl')
         
         # 輸出路徑
         # output path
@@ -1537,6 +1534,7 @@ class PlotUtlis():
         self.cluster_avg_nichespace = None
         self.cluster_labels = None
         self.df_spearman_ecogeo = None
+        self.df_env_corr = None
         
         # 逐一檢查檔案是否存在並讀取
         if os.path.exists(self.avg_elev_path):
@@ -1601,7 +1599,9 @@ class PlotUtlis():
         if os.path.exists(self.geographical_beta_cluster_params_path):
             with open(self.geographical_beta_cluster_params_path, 'r') as f:
                 self.geographical_beta_cluster_params = json.load(f)
-
+                
+        if os.path.exists(self.df_env_corr_path):
+            self.df_env_corr = pd.read_csv(self.df_env_corr_path, index_col = 0)
         
 def create_folder(file_path):
     if not os.path.exists(file_path):
