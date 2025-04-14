@@ -338,19 +338,19 @@ class PlotUtlis():
                 final_col_names.append(f'{env}_{date}')  # Final name
 
             # Combine all environmental variables into a single DataFrame with temporary names
-            df_season = pd.DataFrame(np.array(env_data).T, columns = original_col_names)
+            df_month = pd.DataFrame(np.array(env_data).T, columns = original_col_names)
 
             # Apply PCA to the entire batch
             df_pca = pd.DataFrame(
-                data = pca.transform(df_season), 
+                data = pca.transform(df_month), 
                 columns=[f'PC{i+1:02d}_{date}' for i in range(len(pca.components_))]
             )
 
             # Rename columns to final names for saving
-            df_season.columns = final_col_names
+            df_month.columns = final_col_names
 
             # Append processed data to the list
-            df_env_pca.append(pd.concat([df_season, df_pca], axis = 1))
+            df_env_pca.append(pd.concat([df_month, df_pca], axis = 1))
 
         # Combine all results into a single DataFrame
         df_env_pca = pd.concat(df_env_pca, axis = 1, ignore_index = False)
