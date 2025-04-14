@@ -126,20 +126,3 @@ sudo Rscript -e 'install.packages("hdf5r")'
 ```bash
 sudo Rscript -e 'install.packages("arrow")'
 ```
-
-## 11. Install `hypervolume`
-1. Install GMP:
-    ```bash
-    sudo apt-get install -y libgmp-dev
-    ```
-    
-2. Install `hypervolume`
-    ```bash
-    sudo Rscript -e 'install.packages("hypervolume")'
-    ```
-    
-## 12. Install `data.table`
-```bash
-sudo Rscript -e 'install.packages("data.table")'
-```    
- 
