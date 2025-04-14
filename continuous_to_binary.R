@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 library(hdf5r)
 library(raster)
 library(dismo)
@@ -48,9 +47,6 @@ i_valsplit <- which(is.na(values(trainval_split))) # cell index of validation sp
 env_info_path <- file.path('predicts', run_id, 'env_inf.json')
 env_info <- fromJSON(file = env_info_path)
 
-# load filtered csv from 01_prepare_data.ipynb
-# sp_occ_filter <- read.csv('workspace/species_data/occurrence_data/species_occurrence_filter.csv')
-
 # load species information
 sp_info_path <- file.path('predicts', run_id, 'sp_inf.json')
 sp_info <- fromJSON(file = sp_info_path)
@@ -64,11 +60,7 @@ date_list_train <- DeepSDM_conf$training_conf$date_list_train
 # make species_list for prediction
 species_list <- sort(DeepSDM_conf$training_conf$species_list_train)
 
-# season: specific months in one year
-# seasonavg: every speciefic months in the whole time span
-# all: the whole time span
-# AAA_BBB_CCC_DDD -> In DDD split, auc_roc score of using BBB env data for training and CCC env data for prediction with model AAA
-# eg. 'maxent_season_season_val' means In validation split, auc_roc score of using 'season' env data for training and predicting with 'season' data with maxent model
+
 df_all_season <- data.frame(spdate = character(),
                             maxent_all_season_val = numeric(), maxent_all_season_train = numeric(), maxent_all_season_all = numeric(), 
                             deepsdm_all_season_val = numeric(), deepsdm_all_season_train = numeric(), deepsdm_all_season_all = numeric(), 
@@ -87,8 +79,6 @@ r_start <- as.numeric(args[1])
 # r_start <- 121
 r_end <- r_start + 2
 for(species in species_list[r_start:min(r_end, length(species_list))]){
-  # species <- species_list[121]
-  # species <- 'Alauda_gulgula'
   # set the prediction result does not exists
   
   dir_run_id_png_sp <- file.path(dir_run_id_png, species)
@@ -97,13 +87,13 @@ for(species in species_list[r_start:min(r_end, length(species_list))]){
   create_folder(dir_run_id_h5_sp)
     
   result <- tryCatch({
-    generate_points_all(date_list_train)  # 呼叫函數
-    TRUE  # 如果成功，返回 TRUE
+    generate_points_all(date_list_train)
+    TRUE
   }, error = function(e) {
-    message("Error encountered: ", e$message)  # 顯示錯誤訊息
-    FALSE  # 如果出現錯誤，返回 FALSE
+    message("Error encountered: ", e$message)
+    FALSE
   })
-  # 如果函數發生錯誤，跳過這次的 loop
+
   if (!result) {
     message("Skipping this iteration due to an error.")
     next 
@@ -142,8 +132,6 @@ for(species in species_list[r_start:min(r_end, length(species_list))]){
                                         p_all, p_valpart_all, p_trainpart_all, pa_valpart_all, pa_trainpart_all)
     
   for(date in date_list_predict){
-    # date <- date_list_predict[1]
-    # date <- '2018-12-01'
     print(paste('start', species, date))
     sp_season <- paste0(species, '_', date)
     set_default_variable()
