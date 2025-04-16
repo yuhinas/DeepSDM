@@ -42,7 +42,6 @@ class LitUNetSDM(pl.LightningModule):
     
 
     def predict(self, dataloaders_predict=[], datamodule=None, output_dir='./predicts', ref_geotiff=os.path.join('./workspace', 'extent_binary.tif')):
-        # 設定輸出資料夾與初始化子目錄
         def setup_output_dirs(base_dir, meta_files, subdirs):
             os.makedirs(base_dir, exist_ok=True)
             with open(os.path.join(base_dir, 'DeepSDM_conf.yaml'), 'w') as f:
@@ -51,25 +50,21 @@ class LitUNetSDM(pl.LightningModule):
                 shutil.copy(path, os.path.join(base_dir, f'{key}.json'))
             return {subdir: os.makedirs(os.path.join(base_dir, subdir), exist_ok=True) or os.path.join(base_dir, subdir) for subdir in subdirs}
         
-        # 設定不同資料型態的輸出資料夾的子資料夾（依物種分資料夾）
         def create_species_subdirs(dirs, species_list):
             for d in dirs.values():
                 for species in species_list:
                     os.makedirs(os.path.join(d, species), exist_ok = True)
         
-        # 載入 GeoTIFF 參考檔案
         def load_geotiff(filepath):
             with rasterio.open(filepath) as ref:
                 return ref.crs, ref.read(1), ref.transform
 
-        # 初始化結果與計數張量
         def initialize_tensors(dataloader, device):
             height, width = dataloader.dataset.height_new, dataloader.dataset.width_new
             return (torch.zeros(height, width, device=device),
                     torch.zeros(height, width, device=device, dtype=torch.int32),
                     [] if self.predict_attention else None)
 
-        # 批次數據處理
         def process_batch(inputs, embeddings, h_start, h_end, w_start, w_end, result, counts, attention):
             outputs, A = self.model(inputs.to(self.custom_device), embeddings.to(self.custom_device))
             outputs = torch.sigmoid(outputs).to(self.custom_device)
@@ -88,20 +83,17 @@ class LitUNetSDM(pl.LightningModule):
                 )
             return attention
 
-        # 正規化結果
         def normalize_result(result, counts, extent, nan_tensor, height_original, width_original, subsample_h, subsample_w):
             counts = torch.where(counts == 0, 1, counts).to(self.custom_device)
             normalized = (result / counts).to(self.custom_device)
             cropped = normalized[subsample_h:subsample_h + height_original, subsample_w:subsample_w + width_original].to(self.custom_device)
             return cropped.where(extent == 1, nan_tensor).to(self.custom_device)
 
-        # 儲存結果到文件
         def save_results(result, label, species_date, dirs, extent_binary, crs, transform):
             result_np = result.cpu().numpy()
             sp_date = species_date[0]
             sp, date = '_'.join(sp_date.split('_')[:-1]), sp_date.split('_')[-1]
 
-            # 儲存 PNG
             plt.imshow(result_np, cmap='coolwarm', vmin=0, vmax=1)
             plt.colorbar()
             plt.plot(np.where(label == 1)[1], np.where(label == 1)[0], '.', color='black', markersize=1)
@@ -109,54 +101,38 @@ class LitUNetSDM(pl.LightningModule):
             plt.savefig(os.path.join(dirs['png'], sp, f'{sp}_{date}_predict.png'), dpi=200)
             plt.close()
 
-#             # 儲存 GeoTIFF
-#             with rasterio.open(os.path.join(dirs['tif'], sp, f'{sp}_{date}_predict.tif'), 'w',
-#                                height=extent_binary.shape[0], width=extent_binary.shape[1], count=1,
-#                                nodata=self.no_data, crs=crs, dtype=rasterio.float32, transform=transform) as dst:
-#                 dst.write(result_np * extent_binary, 1)
-
-            # HDF5 文件路徑
             h5_file_path = os.path.join(dirs['h5'], sp, f'{sp}.h5')
         
-            # 將結果寫入 HDF5 文件
-            with h5py.File(h5_file_path, 'a') as hf:  # 使用 'a' 模式打開，追加結果
-                # 儲存地理資訊到文件屬性
-                hf.attrs['crs'] = str(crs)  # 座標參考系（字串形式）
-                hf.attrs['transform'] = transform.to_gdal()  # 仿射變換矩陣（GDAL 格式）
-                hf.attrs['nodata'] = self.no_data  # nodata 值
+            with h5py.File(h5_file_path, 'a') as hf:
+                hf.attrs['crs'] = str(crs)
+                hf.attrs['transform'] = transform.to_gdal()
+                hf.attrs['nodata'] = self.no_data
 
-                # 儲存到 HDF5 文件中的 dataset
                 if date in hf:
                     del hf[date]
                 hf.create_dataset(date, data = result_np * extent_binary, compression = 'gzip')
         
             return {f'{sp}_{date}': np.stack([label, result_np])}
 
-        # 儲存 Attention Map
         def save_attention_maps(dataloader, attention, dirs, species_date, extent_binary, crs, transform, height_original, width_original, subsample_h, subsample_w):
             sp_date = species_date[0]
             sp, date = '_'.join(sp_date.split('_')[:-1]), sp_date.split('_')[-1]
 
-            # 分解注意力的座標
             height_start = attention[:, -4].to(torch.int16)
             width_start = attention[:, -3].to(torch.int16)
             height_end = attention[:, -2].to(torch.int16)
             width_end = attention[:, -1].to(torch.int16)
 
-            # 建立 HDF5 文件
             hdf5_filepath = os.path.join(dirs['attention'], sp, f'{sp}_{date}_attention.h5')
 
             # attention map initialization
             height, width = dataloader.dataset.height_new, dataloader.dataset.width_new
 
-            # 開啟 HDF5 文件以儲存多個環境變量
             with h5py.File(hdf5_filepath, 'w') as hf:
-                # 儲存地理資訊到文件屬性
-                hf.attrs['crs'] = str(crs)  # 座標參考系（字串形式）
-                hf.attrs['transform'] = transform.to_gdal()  # 仿射變換矩陣（GDAL 格式）
-                hf.attrs['nodata'] = self.no_data  # nodata 值
-
-                # 儲存每個環境變量的 Attention Map
+                hf.attrs['crs'] = str(crs)
+                hf.attrs['transform'] = transform.to_gdal()
+                hf.attrs['nodata'] = self.no_data
+                
                 for i_env, env in enumerate(self.training_conf.env_list):
                     attention_map = torch.zeros(height, width, dtype=torch.float32, device=self.custom_device)
                     counts_map = torch.zeros(height, width, dtype=torch.int16, device=self.custom_device)
@@ -165,17 +141,14 @@ class LitUNetSDM(pl.LightningModule):
                         attention_map[height_start[i]:height_end[i], width_start[i]:width_end[i]] += attention[i, i_env]
                         counts_map[height_start[i]:height_end[i], width_start[i]:width_end[i]] += 1
 
-                    # 確保沒有分母為 0 的情況
                     counts_map = torch.where(counts_map == 0, 1, counts_map).to(self.custom_device)
                     attention_map /= counts_map
                     attention_map = attention_map[subsample_h:subsample_h + height_original, subsample_w:subsample_w + width_original].detach().cpu().numpy()
                     attention_map = np.where(extent_binary == 1, attention_map, self.no_data)
 
-                    # 儲存到 HDF5 文件中的 dataset
                     hf.create_dataset(env, data=attention_map, compression='gzip')                    
                     
 
-        # 主函數流程
         subdirs = ['h5', 'png'] + (['attention'] if self.predict_attention else [])
         dirs = setup_output_dirs(output_dir, self.DeepSDM_conf.meta_json_files, subdirs)
         create_species_subdirs(dirs, self.DeepSDM_conf.training_conf['species_list_predict'])
@@ -188,9 +161,9 @@ class LitUNetSDM(pl.LightningModule):
         results = {}
             
         logging.basicConfig(
-            filename='logfile.log',         # 日誌文件名
-            level=logging.INFO,             # 最低記錄級別（DEBUG, INFO, WARNING, ERROR, CRITICAL）
-            format='%(asctime)s - %(levelname)s - %(message)s'  # 日誌格式
+            filename='logfile.log',
+            level=logging.INFO,
+            format='%(asctime)s - %(levelname)s - %(message)s'
         )            
     
         for loader in dataloaders_predict:
@@ -200,14 +173,12 @@ class LitUNetSDM(pl.LightningModule):
             for inputs, embeddings, (h_start, h_end, w_start, w_end), species_date in loader:
                 attention = process_batch(inputs, embeddings, h_start, h_end, w_start, w_end, result, counts, attention)
             
-            # 正規化並儲存輸出
             normalized_result = normalize_result(result, counts, extent, nan_tensor, height_original, width_original, subsample_h, subsample_w)
             label = loader.dataset.label.numpy()
             results.update(save_results(normalized_result, label, species_date, dirs, extent_binary, extent_crs, extent_transform))
 
-            # 儲存 Attention Map（若啟用）
             if self.predict_attention and attention:
-                attention = torch.cat(attention, dim=0)  # 合併列表
+                attention = torch.cat(attention, dim=0)
                 save_attention_maps(loader, attention, dirs, species_date, extent_binary, extent_crs, extent_transform,
                                     height_original, width_original, subsample_h, subsample_w)
             logging.info(f'{species_date[-1]}: {(time.time() - start_time):.2f} seconds. ({self.custom_device})')

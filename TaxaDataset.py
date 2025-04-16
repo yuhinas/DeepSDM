@@ -40,7 +40,7 @@ class TaxaDataset(Dataset):
         else:
             self.width_new = self.width_original + (self.split.shape[1] - self.width_original % self.split.shape[1])
         
-        # train, val 根據split切分後的大小
+        # train, val size based on split 
         self.split_height = self.height_new // self.split.shape[0]
         self.split_width = self.width_new // self.split.shape[1]
 
@@ -48,7 +48,7 @@ class TaxaDataset(Dataset):
 #         starttime = time.time()
 #         print('########## STACKS ##########')
 
-        # 根據split切分後的小部分的長寬位置
+        # subsample size based on split
         split_tif = torch.zeros(self.height_new, self.width_new)
         split_element = []
         h_, w_ = torch.where(self.split == self.trainorval)
@@ -95,19 +95,6 @@ class TaxaDataset(Dataset):
 #         torch.cuda.synchronize()
 #         print(time.time() - starttime)
 #         print('########## STACKS ##########')
-
-        # transform
-        # flip and rotation
-#         self.random_transform = transforms.Compose([
-#             transforms.RandomHorizontalFlip(),
-#             transforms.RandomVerticalFlip(),
-#             transforms.RandomApply(
-#                 torch.nn.ModuleList([
-#                     transforms.RandomRotation((90, 90)),
-#                 ]),
-#                 p=0.5
-#             )
-#         ])
         self.random_transform = transforms.Compose([
             transforms.RandomCrop(size = (self.training_conf.subsample_height, self.training_conf.subsample_width))
         ])

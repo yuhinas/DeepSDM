@@ -217,13 +217,6 @@ class TrainEmbedding:
         with open(cooccurrence_json_file_out, 'w') as f:
             json.dump(embedding_result, f)
         
-        # # WHAT IS THIS???????
-        # with open('../species_data/embedding/cooccurrence_vector_test.csv', 'w') as f:
-        #     for sp in sorted(embedding_result.keys()):
-        #         embedding_vec = ''
-        #         for element in embedding_result[sp]:
-        #             embedding_vec = embedding_vec + '\t' + str(element)
-        #         f.write(f'{sp}{embedding_vec}\n')
         self.embedding = embedding_result
     
     def visualize_embedding(self, embedding=None, show_txt=False, n_neighbors=15):

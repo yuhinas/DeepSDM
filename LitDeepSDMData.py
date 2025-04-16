@@ -330,4 +330,3 @@ class LitDeepSDMData(pl.LightningDataModule):
             ) 
             for dataset_predict in self.datasets_predict
         ]
-

@@ -1,7 +1,6 @@
 import os
 import pandas as pd
 from datetime import datetime
-import pickle as pkl
 import numpy as np
 import torch
 import time
@@ -215,12 +214,4 @@ class CooccurrenceHelper():
         cooccur_counts_df.to_csv(os.path.join(self.cooccurrence_dir, cooccurrence_counts_file), sep='\t', index=False)
         print(f'File: {os.path.join(self.cooccurrence_dir, cooccurrence_counts_file)} saved.')
         print(f'Counting cooccurrence costs {time.time() - start_time} seconds.')
-#         with open(os.path.join(self.cooccurrence_dir, cooccurrence_counts_file), 'w', encoding='utf-8') as out_file:
-#             out_file.write(f"sp1\tsp2\tcounts\n")
-#             for key in cooccurrence:
-#                 try:
-#                     out_file.write(f"{key[0]}\t{key[1]}\t{cooccurrence[key]}\n")
-#                 except:
-#                     # WHAT is `mat` ???
-#                     print(key, mat[key])
 

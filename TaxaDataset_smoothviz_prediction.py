@@ -5,7 +5,7 @@ from torch.utils.data import Dataset
 class TaxaDataset_smoothviz(Dataset):
     def __init__(self, idx_species_date, env_stack, embedding, label_stack, subsample_height, subsample_width, num_smoothviz_steps, device):
         self.device = device
-        self.species_date = label_stack['species_date'][idx_species_date] #'Acridotheres_cristatellus_2000-01-01'之類的
+        self.species_date = label_stack['species_date'][idx_species_date] #e.g.'Acridotheres_cristatellus_2000-01-01'
         self.species = label_stack['species'][idx_species_date]
         self.date = label_stack['date'][idx_species_date]
         self.label = label_stack['tensor'][idx_species_date, ]#.cuda()
@@ -18,17 +18,17 @@ class TaxaDataset_smoothviz(Dataset):
         
         self.height_original = label_stack['tensor'].shape[1]
         self.width_original = label_stack['tensor'].shape[2]
-        self.subsample_height = subsample_height #每一個subsample的尺寸
+        self.subsample_height = subsample_height #size of each subsample
         self.subsample_width = subsample_width
         
-        self.height_elements = self.height_original // self.subsample_height # 原本height方向共有幾個subsamples(整數)
-        self.width_elements = self.width_original // self.subsample_width # 原本width方向共有幾個subsamples(整數)
+        self.height_elements = self.height_original // self.subsample_height # Number of subsample of original height (int)
+        self.width_elements = self.width_original // self.subsample_width # Number of subsample of original width (int)
         
         self.height_new = self.height_original + 3 * self.subsample_height
         self.width_new = self.width_original + 3 * self.subsample_width
-        self.num_smoothviz_steps = num_smoothviz_steps #bootstrap長寬各切幾分，必須為subsample_size的因數。e.g.若為3，代表以3*3張圖套疊而成
+        self.num_smoothviz_steps = num_smoothviz_steps # Number of sets of original height adn width when smoothviz the img. Make sure this should be divided by subsample_size. e.g. if this number is 3, it means that the result of smotthvize is made by 3*3 imgs
         
-        self.step_height = self.subsample_height // self.num_smoothviz_steps #每次smoothviz時移動的大小
+        self.step_height = self.subsample_height // self.num_smoothviz_steps # length of every time smoothviz the img
         self.step_width = self.subsample_width // self.num_smoothviz_steps
 
         assert(self.step_height == self.subsample_height / self.num_smoothviz_steps)
