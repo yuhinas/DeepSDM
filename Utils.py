@@ -20,32 +20,21 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 
 class PlotUtlis():
-    def __init__(self, run_id, exp_id, niche_rst_size):
-        self.niche_rst_size = niche_rst_size
+    def __init__(self, run_id, exp_id):
+        self.niche_rst_size = 100
         
-        
-        
-        # 路徑
         self.conf_path = os.path.join('mlruns', exp_id, run_id, 'artifacts', 'conf')
         self.predicts_path = os.path.join('predicts', run_id)
-        self.predict_maxent_path = os.path.join('predict_maxent', run_id)
-        
-        self.deepsdm_h5_path = os.path.join('predicts', run_id, 'h5', '[SPECIES]', '[SPECIES].h5')
-        self.maxent_h5_path = os.path.join('predict_maxent', run_id, 'h5', 'all', '[SPECIES]', '[SPECIES].h5')  
-        
-        self.attention_h5_path = os.path.join('predicts', run_id, 'attention', '[SPECIES]', '[SPECIES]_[DATE]_attention.h5')
-        
-        
+        self.predicts_maxent_path = os.path.join('predicts_maxent', run_id)
+        self.deepsdm_h5_path = os.path.join(self.predicts_path, 'h5', '[SPECIES]', '[SPECIES].h5')
+        self.maxent_h5_path = os.path.join(self.predicts_maxent_path, 'h5', 'all', '[SPECIES]', '[SPECIES].h5')  
+        self.attention_h5_path = os.path.join(self.predicts_path, 'attention', '[SPECIES]', '[SPECIES]_[DATE]_attention.h5')
         self.traitdataset_taxon_path = os.path.join('dwca-trait_454-v1.68', 'taxon.txt')
         self.traitdataset_mesurement_path = os.path.join('dwca-trait_454-v1.68', 'measurementorfacts.txt')
-        
-        self.performance_indicator_multithreshold = os.path.join('predict_maxent', run_id, 'all_indicator_result_all_season_num_pa*.csv')
-        self.performance_indicator_singlethreshold = os.path.join('predict_maxent', run_id, 'only_threshold_depend_indi_*.csv')
-        
+        self.performance_indicator_multithreshold = os.path.join(self.predicts_maxent_path, 'model_performance_diffthreshold*.csv')
+        self.performance_indicator_singlethreshold = os.path.join(self.predicts_maxent_path, 'model_performance_constantthreshold*.csv')
         
         
-        
-        # 變數
         # DeepSDM configurations
         self.DeepSDM_conf_path = os.path.join(self.conf_path, 'DeepSDM_conf.yaml')
         with open(self.DeepSDM_conf_path, 'r') as f:
@@ -92,11 +81,11 @@ class PlotUtlis():
             'sfcWind': 'Wind speed',
             'tas': 'Temperature',
             'EVI': 'EVI',
-            'landcover_PC00': 'Landcover (LPC1)',
-            'landcover_PC01': 'Landcover (LPC2)',
-            'landcover_PC02': 'Landcover (LPC3)',
-            'landcover_PC03': 'Landcover (LPC4)',
-            'landcover_PC04': 'Landcover (LPC5)', 
+            'landcover_PC00': 'LandcoverPC1',
+            'landcover_PC01': 'LandcoverPC2',
+            'landcover_PC02': 'LandcoverPC3',
+            'landcover_PC03': 'LandcoverPC4',
+            'landcover_PC04': 'LandcoverPC5', 
         }
         self.env_list_detail = [env_list_change[i] for i in self.env_list]
         
@@ -107,14 +96,15 @@ class PlotUtlis():
         
         
         # 子資料夾路徑
-        self.plot_path_embedding_dimension_reduction = os.path.join('plots', run_id, 'Fig2_embedding_dimension_reduction')
-        self.plot_path_embedding_correlation = os.path.join('plots', run_id, 'Fig2_embedding_correlation')
-        self.plot_path_attention = os.path.join('plots', run_id, 'Fig3_attention')
-        self.plot_path_nichespace = os.path.join('plots', run_id, 'Fig4_nichespace')
-        self.plot_path_nichespace_clustering = os.path.join('plots', run_id, 'Fig5_nichespace_clustering')
-        self.plot_path_cph = os.path.join('plots', run_id, 'Fig6_cph')
+        self.plot_path = os.path.join('plots', run_id)
+        self.plot_path_embedding_dimension_reduction = os.path.join(self.plot_path, 'Fig2_embedding_dimension_reduction')
+        self.plot_path_embedding_correlation = os.path.join(self.plot_path, 'Fig2_embedding_correlation')
+        self.plot_path_attention = os.path.join(self.plot_path, 'Fig3_attention')
+        self.plot_path_nichespace = os.path.join(self.plot_path, 'Fig4_nichespace')
+        self.plot_path_nichespace_clustering = os.path.join(self.plot_path, 'Fig5_nichespace_clustering')
+        self.plot_path_cph = os.path.join(self.plot_path, 'Fig6_cph')
         self.plot_path_cph_subplots = os.path.join(self.plot_path_cph, 'subplots')
-        self.plot_path_suppl = os.path.join('plots', run_id, 'FigSuppl')
+        self.plot_path_suppl = os.path.join(self.plot_path, 'FigSuppl')
         
         # 輸出路徑
         # output path
@@ -483,8 +473,8 @@ class PlotUtlis():
             df_species = feather.read_dataframe(self.plot_path_df_species.replace('[SPECIES]', species))
             df_species = pd.concat([df_species, df_grid], axis = 1)
 
-            # season
-            season_sp_date = [(species, d) for d in self.date_list_predict]
+            # month
+            month_sp_date = [(species, d) for d in self.date_list_predict]
             grid_deepsdm_all_month_sum = np.zeros((self.niche_rst_size, self.niche_rst_size))
             grid_deepsdm_all_month_count = np.zeros((self.niche_rst_size, self.niche_rst_size))
             grid_deepsdm_all_month_max = np.zeros((self.niche_rst_size, self.niche_rst_size))
@@ -492,7 +482,7 @@ class PlotUtlis():
             grid_maxent_all_month_count = np.zeros((self.niche_rst_size, self.niche_rst_size))
             grid_maxent_all_month_max = np.zeros((self.niche_rst_size, self.niche_rst_size))
             
-            for (sp, d) in season_sp_date:
+            for (sp, d) in month_sp_date:
                 # calculate grid values
                 grouped = df_species.groupby([f'PC{self.x_pca:02d}_{d}_grid', f'PC{self.y_pca:02d}_{d}_grid'])
 
@@ -747,8 +737,8 @@ class PlotUtlis():
         # 選擇要合併的欄位
         columns_to_merge = [
             'species', 'date', 
-            'maxent_all_season_val', 'maxent_all_season_train', 'maxent_all_season_all',
-            'deepsdm_all_season_val', 'deepsdm_all_season_train', 'deepsdm_all_season_all'
+            'maxent_all_month_val', 'maxent_all_month_train', 'maxent_all_month_all',
+            'deepsdm_all_month_val', 'deepsdm_all_month_train', 'deepsdm_all_month_all'
         ]
         indicator_multithreshold_subset = indicator_multithreshold[columns_to_merge]
 
@@ -757,8 +747,8 @@ class PlotUtlis():
         
         # 將指標重新命名，將 AUC 指標明確顯示為 AUC
         indicator_merged.rename(columns={
-            'deepsdm_all_season_val': 'DeepSDM_AUC', 
-            'maxent_all_season_val': 'MaxEnt_AUC', 
+            'deepsdm_all_month_val': 'DeepSDM_AUC', 
+            'maxent_all_month_val': 'MaxEnt_AUC', 
             'deepsdm_val_TSS': 'DeepSDM_TSS',
             'maxent_val_TSS': 'MaxEnt_TSS',
             'deepsdm_val_kappa': 'DeepSDM_Kappa',
