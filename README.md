@@ -2,6 +2,11 @@
 
 DeepSDM is a deep learning framework for modeling species distributions using environmental data and species co-occurrence patterns. This framework leverages attention mechanisms to capture important environmental factors and produces high-quality species distribution predictions.
 
+## Data and Results
+
+All data and results for this project are available at:
+https://drive.google.com/drive/folders/1zzJg_q1gTyvoprR7r4iX69xrOYRsJlGR?usp=drive_link
+
 ## Overview
 
 DeepSDM uses a U-Net architecture with attention mechanisms to predict species distributions based on environmental variables and species embeddings derived from co-occurrence data. The framework consists of several components for data preparation, model training, prediction, and evaluation.
@@ -45,6 +50,17 @@ pip install pytorch-lightning==2.0.6 torchmetrics==0.11.0
 ## Workflow
 
 The DeepSDM workflow consists of the following steps:
+
+### 0. Download Environmental Data (Download_env.ipynb)
+
+This Jupyter notebook provides instructions and code for downloading the necessary environmental data:
+
+- **CHELSA Dataset**: Downloads climate variables (clt, hurs, pr, rsds, sfcWind, tas) for each month from 2000 to 2019
+- **Land Cover Dataset**: Instructions for downloading ESA Land Cover data (2000-2020)
+- **EVI Dataset**: Instructions for obtaining Enhanced Vegetation Index data from NASA's AppEEARS
+- **Elevation Dataset**: Link to download WorldClim Elevation Data
+
+This step is optional if you already have the environmental data available in the Google Drive link.
 
 ### 1. Data Preparation (01_prepare_data.ipynb)
 
@@ -113,6 +129,11 @@ Two R scripts handle model evaluation and comparison:
   - Evaluates models using constant thresholds across dates
   - Generates binary prediction maps
   - Calculates threshold-dependent metrics
+
+**Important**: To execute these evaluation scripts correctly, you must:
+1. Copy the contents of `run_maxent_and_evaluate_models_batch.sh` to your terminal and execute first
+2. After that completes, copy the contents of `evaluate_models_constantthreshold_batch.sh` to your terminal and execute
+3. Make sure to maintain this exact execution order as the second script depends on outputs from the first script
 
 ## Code Structure
 
@@ -215,8 +236,9 @@ jupyter notebook 03_make_prediction.ipynb
 # Execute cells to generate predictions
 
 # 4. Evaluate results
-Rscript run_maxent_and_evaluate_models.R 0
-Rscript evaluate_models_constantthreshold.R 0
+# Copy the contents of run_maxent_and_evaluate_models_batch.sh to terminal and execute
+# After it completes, copy the contents of evaluate_models_constantthreshold_batch.sh to terminal
+# Note: These must be executed in this exact order!
 ```
 
 ### Custom Species and Dates
@@ -243,6 +265,7 @@ DeepSDM/
 ├── 03_make_prediction.ipynb     # Prediction notebook
 ├── CooccurrenceHelper.py        # Helper for co-occurrences
 ├── DeepSDM_conf.yaml            # Configuration file
+├── Download_env.ipynb           # Instructions for downloading environmental data 
 ├── EmbeddingHelpers.py          # Helper for embeddings
 ├── LitDeepSDMData.py            # Data module
 ├── LitDeepSDMData_prediction.py # Data module for prediction
@@ -255,12 +278,17 @@ DeepSDM/
 ├── Unet.py                      # U-Net model
 ├── Utils.py                     # Utilities
 ├── Utils_R.R                    # R utilities
+├── dwca-trait_454-v1.68/        # Trait dataset files
 ├── evaluate_models_constantthreshold.R # Evaluation script
-├── run_maxent_and_evaluate_models.R   # MaxEnt comparison
-├── raw/                         # Raw input data
-├── workspace/                   # Processed data
+├── evaluate_models_constantthreshold_batch.sh # Batch script for evaluation
 ├── mlruns/                      # MLflow tracking
-└── predicts/                    # Model predictions
+├── plots/                       # Result analysis files and paper figures
+├── predicts/                    # DeepSDM model predictions
+├── predicts_maxent/             # MaxEnt results and model performance
+├── raw/                         # Raw input data
+├── run_maxent_and_evaluate_models.R   # MaxEnt comparison
+├── run_maxent_and_evaluate_models_batch.sh # Batch script for MaxEnt
+└── workspace/                   # Processed data
 ```
 
 ## Data Formats and Storage
